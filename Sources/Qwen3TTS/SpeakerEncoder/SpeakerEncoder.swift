@@ -657,7 +657,7 @@ nonisolated public class SpeakerEncoder: Module {
         eval(testWeight)
     }
 
-    public static func runStandaloneConv1dDiagnostic() throws {
+    public static func runStandaloneConv1dDiagnostic() -> Bool {
         Qwen3TTSPipeline.diagnosticLog("Enter standalone Conv1d diagnostic")
         Qwen3TTSPipeline.diagnosticLog("Create Conv1d")
         let conv = Conv1d(
@@ -669,19 +669,23 @@ nonisolated public class SpeakerEncoder: Module {
             dilation: 1
         )
         Qwen3TTSPipeline.diagnosticLog("Conv1d created")
+        Qwen3TTSPipeline.diagnosticLog("Weight shape: \(conv.weight.shape)")
+        Qwen3TTSPipeline.diagnosticLog("Bias shape: \(conv.bias?.shape ?? [])")
 
-        Qwen3TTSPipeline.diagnosticLog("Create random input [1, 528, 128]")
+        Qwen3TTSPipeline.diagnosticLog("Create random input")
         let input = MLXArray.randomNormal([1, 528, 128])
-        Qwen3TTSPipeline.diagnosticLog("Random input created")
+        Qwen3TTSPipeline.diagnosticLog("Input shape: \(input.shape)")
 
         Qwen3TTSPipeline.diagnosticLog("Before conv(input)")
         let output = conv(input)
         Qwen3TTSPipeline.diagnosticLog("After conv(input)")
+        Qwen3TTSPipeline.diagnosticLog("Output shape: \(output.shape)")
 
         Qwen3TTSPipeline.diagnosticLog("Before eval(output)")
         eval(output)
         Qwen3TTSPipeline.diagnosticLog("After eval(output)")
 
         Qwen3TTSPipeline.diagnosticLog("Standalone Conv1d diagnostic passed")
+        return true
     }
 }
