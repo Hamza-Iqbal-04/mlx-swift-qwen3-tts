@@ -605,21 +605,7 @@ nonisolated public class SpeakerEncoder: Module {
         return embedding
     }
 
-    private func transposeConv(_ weight: MLXArray) -> MLXArray {
-        let t = weight.transposed(0, 2, 1)
 
-        Qwen3TTSPipeline.diagnosticLog("Before contiguous")
-
-        let c = t.contiguous()
-
-        Qwen3TTSPipeline.diagnosticLog("After contiguous")
-
-        eval(c)
-
-        Qwen3TTSPipeline.diagnosticLog("After eval(contiguous)")
-
-        return c
-    }
 
     public func load(weights: [String: MLXArray]) {
         var w: [String: MLXArray] = [:]
@@ -634,15 +620,8 @@ nonisolated public class SpeakerEncoder: Module {
 
         func loadConv(_ conv: Conv1d, weightKey: String, biasKey: String) {
             if let wt = w[weightKey], let b = w[biasKey] {
-                Qwen3TTSPipeline.diagnosticLog("Loading \(weightKey)")
-                Qwen3TTSPipeline.diagnosticLog("Raw weight shape: \(wt.shape)")
-
-                let transposedWt = transposeConv(wt)
-
-                Qwen3TTSPipeline.diagnosticLog("After transposeConv shape: \(transposedWt.shape)")
-                
                 let params = ModuleParameters.unflattened([
-                    "weight": transposedWt,
+                    "weight": wt,
                     "bias": b
                 ])
                 _ = try? conv.update(parameters: params, verify: .none)
