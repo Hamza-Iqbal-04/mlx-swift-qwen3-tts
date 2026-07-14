@@ -906,12 +906,7 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
 
     // MARK: - Voice Cloning
 
-    public func runSpeakerEncoderDiagnostic() -> Bool {
-        guard let spkEncoder = speakerEncoder, spkEncoder.isWeightsLoaded else {
-            return false
-        }
-        return spkEncoder.runLoadedWeightsDiagnostic()
-    }
+
 
     /// Extract a speaker embedding from audio samples.
     ///

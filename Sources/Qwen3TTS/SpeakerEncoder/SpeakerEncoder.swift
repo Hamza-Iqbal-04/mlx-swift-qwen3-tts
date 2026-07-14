@@ -607,8 +607,18 @@ nonisolated public class SpeakerEncoder: Module {
 
     private func transposeConv(_ weight: MLXArray) -> MLXArray {
         let t = weight.transposed(0, 2, 1)
-        eval(t)
-        return t
+
+        Qwen3TTSPipeline.diagnosticLog("Before contiguous")
+
+        let c = t.contiguous()
+
+        Qwen3TTSPipeline.diagnosticLog("After contiguous")
+
+        eval(c)
+
+        Qwen3TTSPipeline.diagnosticLog("After eval(contiguous)")
+
+        return c
     }
 
     public func load(weights: [String: MLXArray]) {
@@ -666,67 +676,4 @@ nonisolated public class SpeakerEncoder: Module {
         eval(testWeight)
     }
 
-    public static func runStandaloneConv1dDiagnostic() -> Bool {
-        Qwen3TTSPipeline.diagnosticLog("Enter standalone Conv1d diagnostic")
-        Qwen3TTSPipeline.diagnosticLog("Create Conv1d")
-        let conv = Conv1d(
-            inputChannels: 128,
-            outputChannels: 512,
-            kernelSize: 5,
-            stride: 1,
-            padding: 0,
-            dilation: 1
-        )
-        Qwen3TTSPipeline.diagnosticLog("Conv1d created")
-        Qwen3TTSPipeline.diagnosticLog("Weight shape: \(conv.weight.shape)")
-        Qwen3TTSPipeline.diagnosticLog("Bias shape: \(conv.bias?.shape ?? [])")
-
-        Qwen3TTSPipeline.diagnosticLog("Create random input")
-        let floatArray = Array(repeating: Float(0.5), count: 1 * 528 * 128)
-        let input = MLXArray(floatArray).reshaped([1, 528, 128])
-        Qwen3TTSPipeline.diagnosticLog("Input shape: \(input.shape)")
-        Qwen3TTSPipeline.diagnosticLog("Input metadata: \(input)")
-
-        Qwen3TTSPipeline.diagnosticLog("Before conv(input)")
-        let output = conv(input)
-        Qwen3TTSPipeline.diagnosticLog("After conv(input)")
-        Qwen3TTSPipeline.diagnosticLog("Output shape: \(output.shape)")
-
-        Qwen3TTSPipeline.diagnosticLog("Before eval(output)")
-        eval(output)
-        Qwen3TTSPipeline.diagnosticLog("After eval(output)")
-
-        Qwen3TTSPipeline.diagnosticLog("Standalone Conv1d diagnostic passed")
-        return true
-    }
-
-    public func runLoadedWeightsDiagnostic() -> Bool {
-        Qwen3TTSPipeline.diagnosticLog("Diagnostic: fresh Conv1d with copied block0 weights")
-        let freshConv = Conv1d(
-            inputChannels: 128,
-            outputChannels: 512,
-            kernelSize: 5,
-            stride: 1,
-            padding: 0,
-            dilation: 1
-        )
-        
-        var paramDict: [String: MLXArray] = ["weight": block0.conv.weight]
-        if let b = block0.conv.bias {
-            paramDict["bias"] = b
-        }
-        let params = ModuleParameters.unflattened(paramDict)
-        _ = try? freshConv.update(parameters: params, verify: .none)
-        
-        let floatArray = Array(repeating: Float(0.5), count: 1 * 536 * 128)
-        let diagInput = MLXArray(floatArray).reshaped([1, 536, 128])
-        
-        Qwen3TTSPipeline.diagnosticLog("Before conv")
-        let diagOutput = freshConv(diagInput)
-        Qwen3TTSPipeline.diagnosticLog("After conv")
-        Qwen3TTSPipeline.diagnosticLog("Before eval")
-        eval(diagOutput)
-        Qwen3TTSPipeline.diagnosticLog("After eval")
-        return true
-    }
 }
