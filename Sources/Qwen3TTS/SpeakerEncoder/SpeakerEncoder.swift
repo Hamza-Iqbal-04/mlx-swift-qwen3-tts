@@ -638,16 +638,6 @@ nonisolated public class SpeakerEncoder: Module {
 
         loadTDNN(block0, prefix: "blocks.0")
 
-        Qwen3TTSPipeline.diagnosticLog("Diagnostic: loaded weights experiment for block0")
-        let floatArray = Array(repeating: Float(0.5), count: 1 * 536 * 128)
-        let diagInput = MLXArray(floatArray).reshaped([1, 536, 128])
-        Qwen3TTSPipeline.diagnosticLog("Before conv")
-        let diagOutput = block0.conv(diagInput)
-        Qwen3TTSPipeline.diagnosticLog("After conv")
-        Qwen3TTSPipeline.diagnosticLog("Before eval")
-        eval(diagOutput)
-        Qwen3TTSPipeline.diagnosticLog("After eval")
-
         let seBlocks = [block1, block2, block3]
         for (i, block) in seBlocks.enumerated() {
             let prefix = "blocks.\(i + 1)"
@@ -707,6 +697,19 @@ nonisolated public class SpeakerEncoder: Module {
         Qwen3TTSPipeline.diagnosticLog("After eval(output)")
 
         Qwen3TTSPipeline.diagnosticLog("Standalone Conv1d diagnostic passed")
+        return true
+    }
+
+    public func runLoadedWeightsDiagnostic() -> Bool {
+        Qwen3TTSPipeline.diagnosticLog("Diagnostic: loaded weights experiment for block0")
+        let floatArray = Array(repeating: Float(0.5), count: 1 * 536 * 128)
+        let diagInput = MLXArray(floatArray).reshaped([1, 536, 128])
+        Qwen3TTSPipeline.diagnosticLog("Before conv")
+        let diagOutput = block0.conv(diagInput)
+        Qwen3TTSPipeline.diagnosticLog("After conv")
+        Qwen3TTSPipeline.diagnosticLog("Before eval")
+        eval(diagOutput)
+        Qwen3TTSPipeline.diagnosticLog("After eval")
         return true
     }
 }
