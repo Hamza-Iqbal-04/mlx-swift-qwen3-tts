@@ -777,6 +777,7 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
         instruct: String? = nil,
         speakerEmbedding: [Float]? = nil,
         referenceTranscript: String? = nil,
+        referenceAudioCodes: [[Int32]]? = nil,
         temperature: Float? = nil,
         onProgress: ((Float) -> Void)? = nil
     ) async -> [Float] {
@@ -786,14 +787,6 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
 
         let textChunks = TextChunker.chunk(text, maxWords: TextChunker.defaultMaxWords)
         guard !textChunks.isEmpty else { return [] }
-
-        // Short text: single generation
-        if textChunks.count == 1 {
-            onProgress?(0.0)
-            let samples = generate(text: textChunks[0], speaker: speaker, temperature: temp)
-            onProgress?(1.0)
-            return samples
-        }
 
         let embeddingData = speakerEmbedding
 
@@ -816,6 +809,7 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                         instruct: instruct,
                         speakerEmbedding: speakerEmbed,
                         referenceTranscript: referenceTranscript,
+                        referenceAudioCodes: referenceAudioCodes,
                         tokenizer: self.tokenizer,
                         temperature: temp,
                         maxTokens: 600
