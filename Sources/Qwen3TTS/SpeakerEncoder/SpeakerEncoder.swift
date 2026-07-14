@@ -634,8 +634,12 @@ nonisolated public class SpeakerEncoder: Module {
 
         func loadConv(_ conv: Conv1d, weightKey: String, biasKey: String) {
             if let wt = w[weightKey], let b = w[biasKey] {
+                Qwen3TTSPipeline.diagnosticLog("Loading \(weightKey) - raw shape from safetensors: \(wt.shape)")
+                let transposedWt = transposeConv(wt)
+                Qwen3TTSPipeline.diagnosticLog("Loading \(weightKey) - shape after transposeConv: \(transposedWt.shape)")
+                
                 let params = ModuleParameters.unflattened([
-                    "weight": transposeConv(wt),
+                    "weight": transposedWt,
                     "bias": b
                 ])
                 _ = try? conv.update(parameters: params, verify: .none)
