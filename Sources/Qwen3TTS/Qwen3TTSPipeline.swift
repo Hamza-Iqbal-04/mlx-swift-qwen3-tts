@@ -792,6 +792,12 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
 
         return await Task.detached(priority: .userInitiated) { [self] () -> [Float] in
             Device.withDefaultDevice(self.device) {
+                defer {
+                    model.clearGenerationCache()
+                    decoder.clearCompiledCache()
+                    DeviceSelector.synchronizeIfNeeded(device: self.device)
+                    Memory.clearCache()
+                }
                 var allSamples: [Float] = []
                 var previousTail: [Float] = []
                 let speakerEmbed: MLXArray? = embeddingData.map { MLXArray($0) }
