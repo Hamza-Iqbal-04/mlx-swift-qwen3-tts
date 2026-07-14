@@ -224,7 +224,11 @@ private func speakerEncoderSTFT(
 // MARK: - Speaker Encoder Components
 
 private func reflectPad1d(_ x: MLXArray, pad: Int) -> MLXArray {
-    if pad <= 0 { return x }
+    Qwen3TTSPipeline.diagnosticLog("Enter reflectPad1d(pad: \(pad))")
+    if pad <= 0 {
+        Qwen3TTSPipeline.diagnosticLog("pad <= 0, leaving reflectPad1d()")
+        return x
+    }
     let (_, time, _) = (x.shape[0], x.shape[1], x.shape[2])
 
     var indices: [Int32] = []
@@ -241,7 +245,10 @@ private func reflectPad1d(_ x: MLXArray, pad: Int) -> MLXArray {
         indices.append(Int32(i))
     }
 
-    return x[0..., MLXArray(indices), 0...]
+    Qwen3TTSPipeline.diagnosticLog("Before x[0..., MLXArray(indices), 0...] with indices count \(indices.count)")
+    let result = x[0..., MLXArray(indices), 0...]
+    Qwen3TTSPipeline.diagnosticLog("After x[0..., MLXArray(indices), 0...]. Leaving reflectPad1d()")
+    return result
 }
 
 nonisolated public class TimeDelayNetBlock: Module {
@@ -262,11 +269,27 @@ nonisolated public class TimeDelayNetBlock: Module {
     }
 
     public func callAsFunction(_ x: MLXArray) -> MLXArray {
+        Qwen3TTSPipeline.diagnosticLog("Enter TimeDelayNetBlock.callAsFunction() (block0)")
+        Qwen3TTSPipeline.diagnosticLog("Before x.transposed(0, 2, 1)")
         var h = x.transposed(0, 2, 1)
+        Qwen3TTSPipeline.diagnosticLog("After x.transposed(0, 2, 1)")
+
+        Qwen3TTSPipeline.diagnosticLog("Before reflectPad1d(h, pad: \(padAmount))")
         h = reflectPad1d(h, pad: padAmount)
+        Qwen3TTSPipeline.diagnosticLog("After reflectPad1d(h, pad: \(padAmount))")
+
+        Qwen3TTSPipeline.diagnosticLog("Before conv(h)")
         h = conv(h)
+        Qwen3TTSPipeline.diagnosticLog("After conv(h)")
+
+        Qwen3TTSPipeline.diagnosticLog("Before h.transposed(0, 2, 1)")
         h = h.transposed(0, 2, 1)
-        return relu(h)
+        Qwen3TTSPipeline.diagnosticLog("After h.transposed(0, 2, 1)")
+
+        Qwen3TTSPipeline.diagnosticLog("Before relu(h)")
+        let out = relu(h)
+        Qwen3TTSPipeline.diagnosticLog("After relu(h). Leaving TimeDelayNetBlock.callAsFunction()")
+        return out
     }
 }
 
