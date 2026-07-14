@@ -897,6 +897,13 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
         }.value
     }
 
+    public static var onDiagnosticLog: ((String) -> Void)? = nil
+
+    public static func diagnosticLog(_ message: String) {
+        print("[Diagnostic] \(message)")
+        onDiagnosticLog?(message)
+    }
+
     // MARK: - Voice Cloning
 
     /// Extract a speaker embedding from audio samples.
@@ -904,16 +911,33 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
     /// - Parameter audioSamples: Raw audio samples (any sample rate, but 16kHz preferred)
     /// - Returns: 1024-dimensional speaker embedding, or nil if speaker encoder is not loaded
     public func extractSpeakerEmbedding(audioSamples: [Float]) -> [Float]? {
+        Qwen3TTSPipeline.diagnosticLog("Enter extractSpeakerEmbedding()")
         guard let spkEncoder = speakerEncoder, spkEncoder.isWeightsLoaded else {
+            Qwen3TTSPipeline.diagnosticLog("Speaker encoder not loaded or weights not loaded. Leaving extractSpeakerEmbedding()")
             return nil
         }
 
         return Device.withDefaultDevice(device) {
-            defer { Memory.clearCache() }
+            defer {
+                Memory.clearCache()
+                Qwen3TTSPipeline.diagnosticLog("Leaving extractSpeakerEmbedding()")
+            }
+            Qwen3TTSPipeline.diagnosticLog("Before MLXArray(audioSamples)")
             let audioArray = MLXArray(audioSamples)
+            Qwen3TTSPipeline.diagnosticLog("After MLXArray(audioSamples)")
+
+            Qwen3TTSPipeline.diagnosticLog("Before spkEncoder.extractEmbedding(audio:)")
             let embedding = spkEncoder.extractEmbedding(audio: audioArray)
+            Qwen3TTSPipeline.diagnosticLog("After spkEncoder.extractEmbedding(audio:)")
+
+            Qwen3TTSPipeline.diagnosticLog("Before eval(embedding)")
             eval(embedding)
-            return embedding.asArray(Float.self)
+            Qwen3TTSPipeline.diagnosticLog("After eval(embedding)")
+
+            Qwen3TTSPipeline.diagnosticLog("Before embedding.asArray(Float.self)")
+            let result = embedding.asArray(Float.self)
+            Qwen3TTSPipeline.diagnosticLog("After embedding.asArray(Float.self)")
+            return result
         }
     }
 

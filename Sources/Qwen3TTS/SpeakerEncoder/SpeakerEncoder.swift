@@ -44,6 +44,7 @@ public func melSpectrogram(
     fmin: Float = 0.0,
     fmax: Float = 12000.0
 ) -> MLXArray {
+    Qwen3TTSPipeline.diagnosticLog("Enter melSpectrogram()")
     var x = audio
     if x.ndim == 1 {
         x = x.expandedDimensions(axis: 0)
@@ -51,6 +52,7 @@ public func melSpectrogram(
 
     let batchSize = x.shape[0]
 
+    Qwen3TTSPipeline.diagnosticLog("Before MelFilterbankCache.shared.get()")
     let melFilters = MelFilterbankCache.shared.get(
         sampleRate: sampleRate,
         nFFT: nFFT,
@@ -58,17 +60,21 @@ public func melSpectrogram(
         fmin: fmin,
         fmax: fmax
     )
+    Qwen3TTSPipeline.diagnosticLog("After MelFilterbankCache.shared.get()")
 
     var mels: [MLXArray] = []
     for i in 0..<batchSize {
         let sample = x[i]
+        Qwen3TTSPipeline.diagnosticLog("Before speakerEncoderSTFT(sample [\(i)])")
         let spec = speakerEncoderSTFT(sample, nFFT: nFFT, hopLength: hopSize, winLength: winSize)
+        Qwen3TTSPipeline.diagnosticLog("After speakerEncoderSTFT(sample [\(i)])")
         let specMag = abs(spec)
         let mel = matmul(specMag, melFilters)
         let logMel = log(clip(mel, min: Float(1e-5), max: Float.greatestFiniteMagnitude))
         mels.append(logMel)
     }
 
+    Qwen3TTSPipeline.diagnosticLog("Leaving melSpectrogram()")
     return MLX.stacked(mels, axis: 0)
 }
 
@@ -172,6 +178,7 @@ private func speakerEncoderSTFT(
     hopLength: Int,
     winLength: Int
 ) -> MLXArray {
+    Qwen3TTSPipeline.diagnosticLog("Enter speakerEncoderSTFT()")
     let padLength = nFFT / 2
     let padded = reflectPadSignal(signal, pad: padLength)
 
@@ -183,8 +190,10 @@ private func speakerEncoderSTFT(
         window[i] = 0.5 * (1.0 - cos(2.0 * Float.pi * Float(i) / Float(winLength - 1)))
     }
 
+    Qwen3TTSPipeline.diagnosticLog("Before padded.asType(DType.float32).asArray(Float.self)")
     let paddedArray = padded.asType(DType.float32)
     let paddedFlat = paddedArray.asArray(Float.self)
+    Qwen3TTSPipeline.diagnosticLog("After padded.asArray(Float.self). Size: \(paddedFlat.count), numFrames: \(numFrames)")
     let maxAccess = numFrames > 0 ? (numFrames - 1) * hopLength + nFFT - 1 : -1
     assert(numFrames == 0 || maxAccess < paddedFlat.count, "stft: would access index \(maxAccess) in array of size \(paddedFlat.count)")
 
@@ -200,10 +209,14 @@ private func speakerEncoderSTFT(
         }
     }
 
+    Qwen3TTSPipeline.diagnosticLog("Before MLXArray(framesFlat).reshaped()")
     let framesStacked = MLXArray(framesFlat).reshaped([numFrames, nFFT])
     eval(framesStacked)
+    Qwen3TTSPipeline.diagnosticLog("After eval(framesStacked)")
 
+    Qwen3TTSPipeline.diagnosticLog("Before rfft(framesStacked, axis: 1)")
     let fftResult = rfft(framesStacked, axis: 1)
+    Qwen3TTSPipeline.diagnosticLog("After rfft(framesStacked, axis: 1). Leaving speakerEncoderSTFT()")
 
     return fftResult
 }
@@ -494,36 +507,47 @@ nonisolated public class SpeakerEncoder: Module {
     }
 
     public func callAsFunction(_ x: MLXArray) -> MLXArray {
+        Qwen3TTSPipeline.diagnosticLog("Enter SpeakerEncoder.callAsFunction()")
         var h = x.transposed(0, 2, 1)
         var hiddenStatesList: [MLXArray] = []
 
+        Qwen3TTSPipeline.diagnosticLog("Before block0(h)")
         h = block0(h)
         hiddenStatesList.append(h)
 
+        Qwen3TTSPipeline.diagnosticLog("Before block1(h)")
         h = block1(h)
         hiddenStatesList.append(h)
 
+        Qwen3TTSPipeline.diagnosticLog("Before block2(h)")
         h = block2(h)
         hiddenStatesList.append(h)
 
+        Qwen3TTSPipeline.diagnosticLog("Before block3(h)")
         h = block3(h)
         hiddenStatesList.append(h)
 
+        Qwen3TTSPipeline.diagnosticLog("Before mfa(h)")
         h = concatenated(Array(hiddenStatesList[1...]), axis: 1)
         h = mfa(h)
 
+        Qwen3TTSPipeline.diagnosticLog("Before asp(h)")
         h = asp(h)
 
+        Qwen3TTSPipeline.diagnosticLog("Before fc(h)")
         h = h.transposed(0, 2, 1)
         h = fc(h)
         h = h.transposed(0, 2, 1)
 
         h = h.squeezed(axis: 2)
 
+        Qwen3TTSPipeline.diagnosticLog("Leaving SpeakerEncoder.callAsFunction()")
         return h
     }
 
     public func extractEmbedding(audio: MLXArray, sampleRate: Int = 24000) -> MLXArray {
+        Qwen3TTSPipeline.diagnosticLog("Enter SpeakerEncoder.extractEmbedding()")
+        Qwen3TTSPipeline.diagnosticLog("Before melSpectrogram()")
         let mels = melSpectrogram(
             audio: audio,
             nFFT: 1024,
@@ -534,9 +558,15 @@ nonisolated public class SpeakerEncoder: Module {
             fmin: 0,
             fmax: 12000
         )
+        Qwen3TTSPipeline.diagnosticLog("After melSpectrogram()")
 
+        Qwen3TTSPipeline.diagnosticLog("Before self(mels)")
         let embedding = self(mels)
+        Qwen3TTSPipeline.diagnosticLog("After self(mels)")
+
+        Qwen3TTSPipeline.diagnosticLog("Before eval(embedding) inside SpeakerEncoder.extractEmbedding")
         eval(embedding)
+        Qwen3TTSPipeline.diagnosticLog("After eval(embedding) inside SpeakerEncoder.extractEmbedding. Leaving SpeakerEncoder.extractEmbedding()")
 
         return embedding
     }
