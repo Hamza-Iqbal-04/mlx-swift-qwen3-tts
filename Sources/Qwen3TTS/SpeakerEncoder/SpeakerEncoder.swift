@@ -638,46 +638,6 @@ nonisolated public class SpeakerEncoder: Module {
 
         loadTDNN(block0, prefix: "blocks.0")
 
-        if let wt = w["blocks.0.conv.weight"], let b = w["blocks.0.conv.bias"] {
-            Qwen3TTSPipeline.diagnosticLog("--- Block0 Weights Diagnostic ---")
-            Qwen3TTSPipeline.diagnosticLog("Safetensor before transpose: \(wt.shape), metadata: \(wt)")
-            
-            let transposedWt = transposeConv(wt)
-            Qwen3TTSPipeline.diagnosticLog("After transposeConv: \(transposedWt.shape), metadata: \(transposedWt)")
-            Qwen3TTSPipeline.diagnosticLog("block0.conv.weight after update: \(block0.conv.weight.shape), metadata: \(block0.conv.weight)")
-            
-            let diff = MLX.abs(block0.conv.weight - transposedWt).max()
-            eval(diff)
-            Qwen3TTSPipeline.diagnosticLog("Max abs diff between block0.conv.weight and transposedWt: \(diff.item(Float.self))")
-            
-            Qwen3TTSPipeline.diagnosticLog("Building fresh standalone Conv1d")
-            let freshConv = Conv1d(
-                inputChannels: 128,
-                outputChannels: 512,
-                kernelSize: 5,
-                stride: 1,
-                padding: 0,
-                dilation: 1
-            )
-            let params = ModuleParameters.unflattened([
-                "weight": block0.conv.weight,
-                "bias": block0.conv.bias ?? b
-            ])
-            _ = try? freshConv.update(parameters: params, verify: .none)
-            
-            Qwen3TTSPipeline.diagnosticLog("Testing freshConv path.")
-            let floatArray = Array(repeating: Float(0.5), count: 1 * 536 * 128)
-            let diagInput = MLXArray(floatArray).reshaped([1, 536, 128])
-            
-            Qwen3TTSPipeline.diagnosticLog("Before freshConv(diagInput)")
-            let diagOutput = freshConv(diagInput)
-            Qwen3TTSPipeline.diagnosticLog("After freshConv(diagInput)")
-            Qwen3TTSPipeline.diagnosticLog("Before eval(freshConv output)")
-            eval(diagOutput)
-            Qwen3TTSPipeline.diagnosticLog("After eval(freshConv output)")
-            Qwen3TTSPipeline.diagnosticLog("--- End Block0 Diagnostic ---")
-        }
-
         let seBlocks = [block1, block2, block3]
         for (i, block) in seBlocks.enumerated() {
             let prefix = "blocks.\(i + 1)"
@@ -741,11 +701,28 @@ nonisolated public class SpeakerEncoder: Module {
     }
 
     public func runLoadedWeightsDiagnostic() -> Bool {
-        Qwen3TTSPipeline.diagnosticLog("Diagnostic: loaded weights experiment for block0")
+        Qwen3TTSPipeline.diagnosticLog("Diagnostic: fresh Conv1d with copied block0 weights")
+        let freshConv = Conv1d(
+            inputChannels: 128,
+            outputChannels: 512,
+            kernelSize: 5,
+            stride: 1,
+            padding: 0,
+            dilation: 1
+        )
+        
+        var paramDict: [String: MLXArray] = ["weight": block0.conv.weight]
+        if let b = block0.conv.bias {
+            paramDict["bias"] = b
+        }
+        let params = ModuleParameters.unflattened(paramDict)
+        _ = try? freshConv.update(parameters: params, verify: .none)
+        
         let floatArray = Array(repeating: Float(0.5), count: 1 * 536 * 128)
         let diagInput = MLXArray(floatArray).reshaped([1, 536, 128])
+        
         Qwen3TTSPipeline.diagnosticLog("Before conv")
-        let diagOutput = block0.conv(diagInput)
+        let diagOutput = freshConv(diagInput)
         Qwen3TTSPipeline.diagnosticLog("After conv")
         Qwen3TTSPipeline.diagnosticLog("Before eval")
         eval(diagOutput)
