@@ -673,7 +673,8 @@ nonisolated public class SpeakerEncoder: Module {
         Qwen3TTSPipeline.diagnosticLog("Bias shape: \(conv.bias?.shape ?? [])")
 
         Qwen3TTSPipeline.diagnosticLog("Create random input")
-        let input = MLXArray.randomNormal([1, 528, 128])
+        let floatArray = Array(repeating: Float(0.5), count: 1 * 528 * 128)
+        let input = MLXArray(floatArray).reshaped([1, 528, 128])
         Qwen3TTSPipeline.diagnosticLog("Input shape: \(input.shape)")
 
         Qwen3TTSPipeline.diagnosticLog("Before conv(input)")
