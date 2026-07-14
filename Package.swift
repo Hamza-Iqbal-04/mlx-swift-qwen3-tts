@@ -15,7 +15,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.21.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift", .exact("0.30.3")),
     ],
     targets: [
         .target(
