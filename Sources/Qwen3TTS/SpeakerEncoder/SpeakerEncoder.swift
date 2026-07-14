@@ -254,6 +254,7 @@ private func reflectPad1d(_ x: MLXArray, pad: Int) -> MLXArray {
 nonisolated public class TimeDelayNetBlock: Module {
     public let conv: Conv1d
     private let padAmount: Int
+    public var isBlock0: Bool = false
 
     public init(inChannels: Int, outChannels: Int, kernelSize: Int, dilation: Int = 1) {
         self.padAmount = (kernelSize - 1) * dilation / 2
@@ -269,7 +270,7 @@ nonisolated public class TimeDelayNetBlock: Module {
     }
 
     public func callAsFunction(_ x: MLXArray) -> MLXArray {
-        Qwen3TTSPipeline.diagnosticLog("Enter TimeDelayNetBlock.callAsFunction() (block0)")
+        Qwen3TTSPipeline.diagnosticLog(isBlock0 ? "Enter TimeDelayNetBlock.callAsFunction() (block0)" : "Enter TimeDelayNetBlock.callAsFunction()")
         Qwen3TTSPipeline.diagnosticLog("Before x.transposed(0, 2, 1)")
         var h = x.transposed(0, 2, 1)
         Qwen3TTSPipeline.diagnosticLog("After x.transposed(0, 2, 1)")
@@ -278,9 +279,23 @@ nonisolated public class TimeDelayNetBlock: Module {
         h = reflectPad1d(h, pad: padAmount)
         Qwen3TTSPipeline.diagnosticLog("After reflectPad1d(h, pad: \(padAmount))")
 
-        Qwen3TTSPipeline.diagnosticLog("Before conv(h)")
-        h = conv(h)
-        Qwen3TTSPipeline.diagnosticLog("After conv(h)")
+        if isBlock0 {
+            Qwen3TTSPipeline.diagnosticLog("Before the layout conversion")
+            h = h.transposed(0, 2, 1)
+            Qwen3TTSPipeline.diagnosticLog("After the layout conversion")
+
+            Qwen3TTSPipeline.diagnosticLog("Before conv(h)")
+            h = conv(h)
+            Qwen3TTSPipeline.diagnosticLog("After conv(h)")
+
+            Qwen3TTSPipeline.diagnosticLog("Before the transpose back")
+            h = h.transposed(0, 2, 1)
+            Qwen3TTSPipeline.diagnosticLog("After the transpose back")
+        } else {
+            Qwen3TTSPipeline.diagnosticLog("Before conv(h)")
+            h = conv(h)
+            Qwen3TTSPipeline.diagnosticLog("After conv(h)")
+        }
 
         Qwen3TTSPipeline.diagnosticLog("Before h.transposed(0, 2, 1)")
         h = h.transposed(0, 2, 1)
@@ -478,6 +493,7 @@ nonisolated public class SpeakerEncoder: Module {
             kernelSize: config.encKernelSizes[0],
             dilation: config.encDilations[0]
         )
+        self.block0.isBlock0 = true
 
         self.block1 = SqueezeExcitationRes2NetBlock(
             inChannels: config.encChannels[0],
