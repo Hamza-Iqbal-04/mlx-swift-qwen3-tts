@@ -279,6 +279,15 @@ nonisolated public class TimeDelayNetBlock: Module {
         h = reflectPad1d(h, pad: padAmount)
         Qwen3TTSPipeline.diagnosticLog("After reflectPad1d(h, pad: \(padAmount))")
 
+        if isBlock0 {
+            Qwen3TTSPipeline.diagnosticLog("reflectPad output shape: \(h.shape)")
+            Qwen3TTSPipeline.diagnosticLog("reflectPad output metadata: \(h)")
+            
+            Qwen3TTSPipeline.diagnosticLog("Before eval(reflectPad output)")
+            eval(h)
+            Qwen3TTSPipeline.diagnosticLog("After eval(reflectPad output)")
+        }
+
         Qwen3TTSPipeline.diagnosticLog("Before conv(h)")
         h = conv(h)
         Qwen3TTSPipeline.diagnosticLog("After conv(h)")
@@ -676,6 +685,7 @@ nonisolated public class SpeakerEncoder: Module {
         let floatArray = Array(repeating: Float(0.5), count: 1 * 528 * 128)
         let input = MLXArray(floatArray).reshaped([1, 528, 128])
         Qwen3TTSPipeline.diagnosticLog("Input shape: \(input.shape)")
+        Qwen3TTSPipeline.diagnosticLog("Input metadata: \(input)")
 
         Qwen3TTSPipeline.diagnosticLog("Before conv(input)")
         let output = conv(input)
