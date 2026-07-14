@@ -279,23 +279,9 @@ nonisolated public class TimeDelayNetBlock: Module {
         h = reflectPad1d(h, pad: padAmount)
         Qwen3TTSPipeline.diagnosticLog("After reflectPad1d(h, pad: \(padAmount))")
 
-        if isBlock0 {
-            Qwen3TTSPipeline.diagnosticLog("Before the layout conversion")
-            h = h.transposed(0, 2, 1)
-            Qwen3TTSPipeline.diagnosticLog("After the layout conversion")
-
-            Qwen3TTSPipeline.diagnosticLog("Before conv(h)")
-            h = conv(h)
-            Qwen3TTSPipeline.diagnosticLog("After conv(h)")
-
-            Qwen3TTSPipeline.diagnosticLog("Before the transpose back")
-            h = h.transposed(0, 2, 1)
-            Qwen3TTSPipeline.diagnosticLog("After the transpose back")
-        } else {
-            Qwen3TTSPipeline.diagnosticLog("Before conv(h)")
-            h = conv(h)
-            Qwen3TTSPipeline.diagnosticLog("After conv(h)")
-        }
+        Qwen3TTSPipeline.diagnosticLog("Before conv(h)")
+        h = conv(h)
+        Qwen3TTSPipeline.diagnosticLog("After conv(h)")
 
         Qwen3TTSPipeline.diagnosticLog("Before h.transposed(0, 2, 1)")
         h = h.transposed(0, 2, 1)
