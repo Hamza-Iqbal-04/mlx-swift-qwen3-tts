@@ -736,6 +736,7 @@ nonisolated public class DecoderResidualUnit: Module {
 nonisolated public class DecoderBlockUpsample: Module {
     let conv: ConvTransposed1d
     let trimRight: Int
+    let upsampleRate: Int
 
     public init(inDim: Int, outDim: Int, upsampleRate: Int) {
         let kernelSize = 2 * upsampleRate
@@ -747,20 +748,59 @@ nonisolated public class DecoderBlockUpsample: Module {
             padding: 0
         )
         self.trimRight = kernelSize - upsampleRate
+        self.upsampleRate = upsampleRate
         super.init()
     }
 
     public func callAsFunction(_ x: MLXArray) -> MLXArray {
+        if upsampleRate == 3 {
+            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Enter. Input shape: \(x.shape), dtype: \(x.dtype)")
+        }
+        
+        if upsampleRate == 3 {
+            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Before initial transpose(0,2,1). Input shape: \(x.shape), dtype: \(x.dtype)")
+        }
         var result = x.transposed(0, 2, 1)
+        if upsampleRate == 3 {
+            eval(result)
+            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): After initial transpose(0,2,1). Shape: \(result.shape), dtype: \(result.dtype)")
+        }
+        
+        if upsampleRate == 3 {
+            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Before ConvTransposed1d. Input shape: \(result.shape), dtype: \(result.dtype)")
+        }
         result = conv(result)
+        if upsampleRate == 3 {
+            eval(result)
+            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): After ConvTransposed1d. Shape: \(result.shape), dtype: \(result.dtype)")
+        }
+        
+        if upsampleRate == 3 {
+            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Before final transpose(0,2,1). Input shape: \(result.shape), dtype: \(result.dtype)")
+        }
         result = result.transposed(0, 2, 1)
+        if upsampleRate == 3 {
+            eval(result)
+            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): After final transpose(0,2,1). Shape: \(result.shape), dtype: \(result.dtype)")
+        }
 
         if trimRight > 0 {
             let timeLen = result.shape[2]
             let endIdx = timeLen - trimRight
             if endIdx > 0 {
+                if upsampleRate == 3 {
+                    Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Before crop [0..<endIdx]. Input shape: \(result.shape), dtype: \(result.dtype)")
+                }
                 result = result[0..., 0..., 0..<endIdx]
+                if upsampleRate == 3 {
+                    eval(result)
+                    Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): After crop [0..<endIdx]. Shape: \(result.shape), dtype: \(result.dtype)")
+                }
             }
+        }
+        
+        if upsampleRate == 3 {
+            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Exit")
         }
         return result
     }
