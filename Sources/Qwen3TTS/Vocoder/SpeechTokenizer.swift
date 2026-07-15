@@ -514,7 +514,8 @@ nonisolated public class EuclideanCodebook: Module {
         let xSq = sum(x * x, axis: -1, keepDims: true)               // [B, T, 1]
         let eSq = sum(embedWeight * embedWeight, axis: -1, keepDims: false)  // [codebookSize]
         let dot = matmul(x, embedWeight.transposed(0, 1))             // [B, T, codebookSize]
-        let dist = xSq - 2 * dot + eSq  // broadcast eSq to [B, T, codebookSize]
+        let two = MLXArray(2.0, type: dot.dtype)
+        let dist = xSq - (two * dot) + eSq  // broadcast eSq to [B, T, codebookSize]
         return argMin(dist, axis: -1).asType(.int32)                  // [B, T]
     }
 }
