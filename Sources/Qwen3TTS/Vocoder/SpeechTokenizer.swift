@@ -737,6 +737,10 @@ nonisolated public class DecoderBlockUpsample: Module {
     let conv: ConvTransposed1d
     let trimRight: Int
     let upsampleRate: Int
+    let inDim: Int
+    let outDim: Int
+    let kernelSize: Int
+    var hasRunDiagnostic = false
 
     public init(inDim: Int, outDim: Int, upsampleRate: Int) {
         let kernelSize = 2 * upsampleRate
@@ -749,10 +753,48 @@ nonisolated public class DecoderBlockUpsample: Module {
         )
         self.trimRight = kernelSize - upsampleRate
         self.upsampleRate = upsampleRate
+        self.inDim = inDim
+        self.outDim = outDim
+        self.kernelSize = kernelSize
         super.init()
     }
 
     public func callAsFunction(_ x: MLXArray) -> MLXArray {
+        if upsampleRate == 3 && !hasRunDiagnostic {
+            hasRunDiagnostic = true
+            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Running isolated ConvTransposed1d diagnostic...")
+            
+            let diagConv = ConvTransposed1d(
+                inputChannels: self.inDim,
+                outputChannels: self.outDim,
+                kernelSize: self.kernelSize,
+                stride: self.upsampleRate,
+                padding: 0
+            )
+            do {
+                try diagConv.update(parameters: self.conv.parameters(), verify: .all)
+                Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Isolated diagnostic parameters copied successfully.")
+                
+                let wShape = diagConv.weight.shape
+                let wDtype = diagConv.weight.dtype
+                
+                let test1 = MLXArray.zeros([1, 15360, self.inDim], dtype: x.dtype)
+                Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Diagnostic Test 1 - Input shape: \(test1.shape), dtype: \(test1.dtype) | Weight shape: \(wShape), dtype: \(wDtype)")
+                let res1 = diagConv(test1)
+                eval(res1)
+                Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Diagnostic Test 1 succeeded.")
+                
+                let test2 = MLXArray.zeros([1, 20480, self.inDim], dtype: x.dtype)
+                Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Diagnostic Test 2 - Input shape: \(test2.shape), dtype: \(test2.dtype) | Weight shape: \(wShape), dtype: \(wDtype)")
+                let res2 = diagConv(test2)
+                eval(res2)
+                Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Diagnostic Test 2 succeeded.")
+                
+            } catch {
+                Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Isolated diagnostic failed to copy parameters: \(error)")
+            }
+        }
+
         if upsampleRate == 3 {
             Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Enter. Input shape: \(x.shape), dtype: \(x.dtype)")
         }
@@ -769,7 +811,7 @@ nonisolated public class DecoderBlockUpsample: Module {
         if upsampleRate == 3 {
             Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Before ConvTransposed1d. Input shape: \(result.shape), dtype: \(result.dtype)")
         }
-        result = conv(result)
+        result = self.conv(result)
         if upsampleRate == 3 {
             eval(result)
             Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): After ConvTransposed1d. Shape: \(result.shape), dtype: \(result.dtype)")
