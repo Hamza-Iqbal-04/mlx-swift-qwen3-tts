@@ -959,24 +959,44 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
     /// - Parameter audioSamples: Audio samples at 24kHz
     /// - Returns: Audio codes as [[Int32]] with shape [num_quantizers, time], or nil
     public func encodeReferenceAudio(audioSamples: [Float]) -> [[Int32]]? {
-        guard let encoder = audioEncoder else { return nil }
+        Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: Enter")
+        guard let encoder = audioEncoder else {
+            Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: audioEncoder is nil")
+            return nil
+        }
+        Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: Encoder is not nil")
 
         return Device.withDefaultDevice(device) {
             defer { Memory.clearCache() }
+            Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: Inside withDefaultDevice")
 
+            Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: Before expandedDimensions")
             let audioArray = MLXArray(audioSamples).expandedDimensions(axis: 0)
+            Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: After expandedDimensions")
+            
+            Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: Before encoder.encode")
             let codes = encoder.encode(audioArray)
+            Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: After encoder.encode")
+            
+            Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: Before eval(codes)")
             eval(codes)
+            Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: After eval(codes)")
 
             let numQuantizers = codes.shape[1]
             let timeFrames = codes.shape[2]
+            Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: Codes shape is \(codes.shape)")
 
             var result: [[Int32]] = []
             for q in 0..<numQuantizers {
+                Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: Before codes slice for q=\(q)")
                 let quantizerCodes = codes[0, q, 0..<timeFrames]
+                Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: Before eval(quantizerCodes) for q=\(q)")
                 eval(quantizerCodes)
+                Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: Before asArray for q=\(q)")
                 result.append(quantizerCodes.asArray(Int32.self))
+                Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: After asArray for q=\(q)")
             }
+            Qwen3TTSPipeline.diagnosticLog("encodeReferenceAudio: Exit")
             return result
         }
     }

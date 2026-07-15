@@ -513,39 +513,61 @@ nonisolated public class Qwen3TTSAudioEncoder: Module {
     /// - Parameter audio: Raw audio tensor [B, samples] or [B, 1, samples]
     /// - Returns: Quantized codes [B, num_quantizers, time]
     public func encode(_ audio: MLXArray) -> MLXArray {
-        callAsFunction(audio)
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder: Enter encode")
+        let result = callAsFunction(audio)
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder: Exit encode")
+        return result
     }
 
     public func callAsFunction(_ x: MLXArray) -> MLXArray {
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: Enter. Input shape: \(x.shape)")
         // Ensure input is [B, 1, L]
         var h = x
         if h.ndim == 2 {
+            Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: Before expanding dimensions")
             h = h.expandedDimensions(axis: 1)  // [B, L] -> [B, 1, L]
+            Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: After expanding dimensions")
         }
 
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: Before CNN encoder")
         // CNN encoder: [B, 1, L] -> [B, hidden_size, L/960]
         h = encoder(h)
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: After CNN encoder. Output shape: \(h.shape)")
 
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: Before first transpose")
         // Transpose to [B, T, hidden_size] for transformer
         h = h.transposed(0, 2, 1)
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: After first transpose")
 
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: Before encoderTransformer")
         // Encoder transformer (non-causal): [B, T, hidden_size] -> [B, T, hidden_size]
         h = encoderTransformer(h)
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: After encoderTransformer")
 
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: Before second transpose")
         // Transpose back to [B, hidden_size, T] for downsample
         h = h.transposed(0, 2, 1)
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: After second transpose")
 
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: Before downsample")
         // Downsample: [B, hidden_size, T] -> [B, hidden_size, T/2]
         h = downsample(h)
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: After downsample")
 
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: Before quantizer.encode")
         // Quantize: [B, hidden_size, T/2] -> [B, numQuantizers, T/2]
         var codes = quantizer.encode(h)
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: After quantizer.encode. Output shape: \(codes.shape)")
 
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: Before checking validNumQuantizers")
         // Keep only first validNumQuantizers
         if codes.shape[1] > validNumQuantizers {
+            Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: Before codes slice")
             codes = codes[0..., 0..<validNumQuantizers, 0...]
+            Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: After codes slice")
         }
 
+        Qwen3TTSPipeline.diagnosticLog("Qwen3TTSAudioEncoder.callAsFunction: Exit")
         return codes
     }
 
