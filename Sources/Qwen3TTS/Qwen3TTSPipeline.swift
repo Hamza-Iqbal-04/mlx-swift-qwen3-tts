@@ -242,65 +242,48 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
         self.config = result.5
         
         // --- START MLX CONV_TRANSPOSED1D PRIMITIVE DIAGNOSTIC ---
-        Qwen3TTSPipeline.diagnosticLog("--- STARTING MLX CONV_TRANSPOSED1D PRIMITIVE DIAGNOSTIC ---")
+        Qwen3TTSPipeline.diagnosticLog("--- STARTING MLX CONV_TRANSPOSED1D STRIDE DIAGNOSTIC ---")
         Device.withDefaultDevice(self.device) {
             
             func runEvalWithMemory(_ array: MLXArray, label: String) {
                 Qwen3TTSPipeline.diagnosticLog("\(label) Before eval. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
-                Thread.sleep(forTimeInterval: 0.05) // Ensure log flush before potential segfault
+                Thread.sleep(forTimeInterval: 0.05)
                 eval(array)
                 Qwen3TTSPipeline.diagnosticLog("\(label) After eval. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
                 Thread.sleep(forTimeInterval: 0.05)
             }
-
-            func runEvalWithMemoryForLayer(_ layer: ConvTransposed1d, label: String) {
-                Qwen3TTSPipeline.diagnosticLog("\(label) Before eval parameters. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
-                Thread.sleep(forTimeInterval: 0.05)
-                eval([layer.weight, layer.bias].compactMap { $0 })
-                Qwen3TTSPipeline.diagnosticLog("\(label) After eval parameters. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
-                Thread.sleep(forTimeInterval: 0.05)
-            }
             
-            // Test A: Intrinsic shape limit
-            Qwen3TTSPipeline.diagnosticLog("=== Test A: Intrinsic Shape [1, 20480, 192] ===")
-            let diagA = ConvTransposed1d(inputChannels: 192, outputChannels: 96, kernelSize: 6, stride: 3, padding: 0)
-            runEvalWithMemoryForLayer(diagA, label: "Test A init")
-            let testA = MLXArray.zeros([1, 20480, 192], dtype: .float32)
-            let resA = diagA(testA)
-            runEvalWithMemory(resA, label: "Test A [1, 20480, 192]")
+            let diagConv = ConvTransposed1d(inputChannels: 192, outputChannels: 96, kernelSize: 6, stride: 3, padding: 0)
+            eval([diagConv.weight, diagConv.bias].compactMap { $0 })
             
-            // Test B: Cache poisoning (increasing shape)
-            Qwen3TTSPipeline.diagnosticLog("=== Test B: Increasing Shape [1, 15360, 192] -> [1, 20480, 192] ===")
-            let diagB = ConvTransposed1d(inputChannels: 192, outputChannels: 96, kernelSize: 6, stride: 3, padding: 0)
-            runEvalWithMemoryForLayer(diagB, label: "Test B init")
-            let testB1 = MLXArray.zeros([1, 15360, 192], dtype: .float32)
-            let resB1 = diagB(testB1)
-            runEvalWithMemory(resB1, label: "Test B [1, 15360, 192]")
-            let testB2 = MLXArray.zeros([1, 20480, 192], dtype: .float32)
-            let resB2 = diagB(testB2)
-            runEvalWithMemory(resB2, label: "Test B [1, 20480, 192]")
+            // Test 1: Contiguous tensor
+            Qwen3TTSPipeline.diagnosticLog("=== Test 1: Contiguous Tensor ===")
+            let testContiguous = MLXArray.zeros([1, 20480, 192], dtype: .float32)
+            eval(testContiguous)
+            Qwen3TTSPipeline.diagnosticLog("Test 1 input: shape \(testContiguous.shape), strides \(testContiguous.internalStrides)")
+            let resContiguous = diagConv(testContiguous)
+            runEvalWithMemory(resContiguous, label: "Test 1 [1, 20480, 192]")
             
-            // Test C: Cache poisoning (decreasing shape)
-            Qwen3TTSPipeline.diagnosticLog("=== Test C: Decreasing Shape [1, 20480, 192] -> [1, 15360, 192] ===")
-            let diagC = ConvTransposed1d(inputChannels: 192, outputChannels: 96, kernelSize: 6, stride: 3, padding: 0)
-            runEvalWithMemoryForLayer(diagC, label: "Test C init")
-            let testC1 = MLXArray.zeros([1, 20480, 192], dtype: .float32)
-            let resC1 = diagC(testC1)
-            runEvalWithMemory(resC1, label: "Test C [1, 20480, 192]")
-            let testC2 = MLXArray.zeros([1, 15360, 192], dtype: .float32)
-            let resC2 = diagC(testC2)
-            runEvalWithMemory(resC2, label: "Test C [1, 15360, 192]")
+            // Test 2: Transposed view forced contiguous
+            Qwen3TTSPipeline.diagnosticLog("=== Test 2: Transposed View -> Forced Contiguous ===")
+            let testStridedForced = MLXArray.zeros([1, 192, 20480], dtype: .float32).transposed(0, 2, 1)
+            eval(testStridedForced)
+            Qwen3TTSPipeline.diagnosticLog("Test 2 (Before contiguous): shape \(testStridedForced.shape), strides \(testStridedForced.internalStrides)")
             
-            // Test D: Small dynamic shapes
-            Qwen3TTSPipeline.diagnosticLog("=== Test D: Small Shape Transition [1, 1024, 192] -> [1, 2048, 192] ===")
-            let diagD = ConvTransposed1d(inputChannels: 192, outputChannels: 96, kernelSize: 6, stride: 3, padding: 0)
-            runEvalWithMemoryForLayer(diagD, label: "Test D init")
-            let testD1 = MLXArray.zeros([1, 1024, 192], dtype: .float32)
-            let resD1 = diagD(testD1)
-            runEvalWithMemory(resD1, label: "Test D [1, 1024, 192]")
-            let testD2 = MLXArray.zeros([1, 2048, 192], dtype: .float32)
-            let resD2 = diagD(testD2)
-            runEvalWithMemory(resD2, label: "Test D [1, 2048, 192]")
+            let testForcedContiguous = contiguous(testStridedForced)
+            eval(testForcedContiguous)
+            Qwen3TTSPipeline.diagnosticLog("Test 2 (After contiguous): shape \(testForcedContiguous.shape), strides \(testForcedContiguous.internalStrides)")
+            
+            let resForcedContiguous = diagConv(testForcedContiguous)
+            runEvalWithMemory(resForcedContiguous, label: "Test 2 [1, 20480, 192] Forced Contiguous")
+            
+            // Test 3: Transposed strided view (Mimics production bug)
+            Qwen3TTSPipeline.diagnosticLog("=== Test 3: Transposed Strided View ===")
+            let testStrided = MLXArray.zeros([1, 192, 20480], dtype: .float32).transposed(0, 2, 1)
+            eval(testStrided)
+            Qwen3TTSPipeline.diagnosticLog("Test 3 input: shape \(testStrided.shape), strides \(testStrided.internalStrides)")
+            let resStrided = diagConv(testStrided)
+            runEvalWithMemory(resStrided, label: "Test 3 [1, 20480, 192] Strided View")
         }
         Qwen3TTSPipeline.diagnosticLog("--- END MLX CONV_TRANSPOSED1D PRIMITIVE DIAGNOSTIC ---")
     }
