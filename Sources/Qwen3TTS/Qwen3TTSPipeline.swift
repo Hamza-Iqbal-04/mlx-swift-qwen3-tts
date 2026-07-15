@@ -240,6 +240,65 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
         self.speakerEncoder = result.3
         self.audioEncoder = result.4
         self.config = result.5
+        
+        // --- START MLX CONV_TRANSPOSED1D PRIMITIVE DIAGNOSTIC ---
+        Qwen3TTSPipeline.diagnosticLog("--- STARTING MLX CONV_TRANSPOSED1D PRIMITIVE DIAGNOSTIC ---")
+        Device.withDefaultDevice(self.device) {
+            
+            func runEvalWithMemory(_ array: MLXArray, label: String) {
+                Qwen3TTSPipeline.diagnosticLog("\(label) Before eval. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
+                eval(array)
+                Qwen3TTSPipeline.diagnosticLog("\(label) After eval. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
+            }
+
+            func runEvalWithMemoryForLayer(_ layer: ConvTransposed1d, label: String) {
+                Qwen3TTSPipeline.diagnosticLog("\(label) Before eval parameters. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
+                eval([layer.weight, layer.bias].compactMap { $0 })
+                Qwen3TTSPipeline.diagnosticLog("\(label) After eval parameters. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
+            }
+            
+            // Test A: Intrinsic shape limit
+            Qwen3TTSPipeline.diagnosticLog("=== Test A: Intrinsic Shape [1, 20480, 192] ===")
+            let diagA = ConvTransposed1d(inputChannels: 192, outputChannels: 96, kernelSize: 6, stride: 3, padding: 0)
+            runEvalWithMemoryForLayer(diagA, label: "Test A init")
+            let testA = MLXArray.zeros([1, 20480, 192], dtype: .float32)
+            let resA = diagA(testA)
+            runEvalWithMemory(resA, label: "Test A [1, 20480, 192]")
+            
+            // Test B: Cache poisoning (increasing shape)
+            Qwen3TTSPipeline.diagnosticLog("=== Test B: Increasing Shape [1, 15360, 192] -> [1, 20480, 192] ===")
+            let diagB = ConvTransposed1d(inputChannels: 192, outputChannels: 96, kernelSize: 6, stride: 3, padding: 0)
+            runEvalWithMemoryForLayer(diagB, label: "Test B init")
+            let testB1 = MLXArray.zeros([1, 15360, 192], dtype: .float32)
+            let resB1 = diagB(testB1)
+            runEvalWithMemory(resB1, label: "Test B [1, 15360, 192]")
+            let testB2 = MLXArray.zeros([1, 20480, 192], dtype: .float32)
+            let resB2 = diagB(testB2)
+            runEvalWithMemory(resB2, label: "Test B [1, 20480, 192]")
+            
+            // Test C: Cache poisoning (decreasing shape)
+            Qwen3TTSPipeline.diagnosticLog("=== Test C: Decreasing Shape [1, 20480, 192] -> [1, 15360, 192] ===")
+            let diagC = ConvTransposed1d(inputChannels: 192, outputChannels: 96, kernelSize: 6, stride: 3, padding: 0)
+            runEvalWithMemoryForLayer(diagC, label: "Test C init")
+            let testC1 = MLXArray.zeros([1, 20480, 192], dtype: .float32)
+            let resC1 = diagC(testC1)
+            runEvalWithMemory(resC1, label: "Test C [1, 20480, 192]")
+            let testC2 = MLXArray.zeros([1, 15360, 192], dtype: .float32)
+            let resC2 = diagC(testC2)
+            runEvalWithMemory(resC2, label: "Test C [1, 15360, 192]")
+            
+            // Test D: Small dynamic shapes
+            Qwen3TTSPipeline.diagnosticLog("=== Test D: Small Shape Transition [1, 1024, 192] -> [1, 2048, 192] ===")
+            let diagD = ConvTransposed1d(inputChannels: 192, outputChannels: 96, kernelSize: 6, stride: 3, padding: 0)
+            runEvalWithMemoryForLayer(diagD, label: "Test D init")
+            let testD1 = MLXArray.zeros([1, 1024, 192], dtype: .float32)
+            let resD1 = diagD(testD1)
+            runEvalWithMemory(resD1, label: "Test D [1, 1024, 192]")
+            let testD2 = MLXArray.zeros([1, 2048, 192], dtype: .float32)
+            let resD2 = diagD(testD2)
+            runEvalWithMemory(resD2, label: "Test D [1, 2048, 192]")
+        }
+        Qwen3TTSPipeline.diagnosticLog("--- END MLX CONV_TRANSPOSED1D PRIMITIVE DIAGNOSTIC ---")
     }
 
     // MARK: - Simple Generation
