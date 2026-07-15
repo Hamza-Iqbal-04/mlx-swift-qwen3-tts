@@ -517,11 +517,7 @@ nonisolated public class Qwen3TTSAudioEncoder: Module {
         let parameters = ModuleParameters.unflattened(sanitized)
         
         Qwen3TTSPipeline.diagnosticLog("--- DIAGNOSTIC: Unflattened Top-Level Keys ---")
-        if case .dict(let dict) = parameters {
-            for k in dict.keys.sorted() {
-                Qwen3TTSPipeline.diagnosticLog(k)
-            }
-        }
+        Qwen3TTSPipeline.diagnosticLog("(Top level keys are inferred from sanitized flat keys)")
         
         Qwen3TTSPipeline.diagnosticLog("--- DIAGNOSTIC: Qwen3TTSAudioEncoder Properties ---")
         let mirror = Mirror(reflecting: self)
