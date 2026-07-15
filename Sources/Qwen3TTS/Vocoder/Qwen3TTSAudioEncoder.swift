@@ -514,6 +514,11 @@ nonisolated public class Qwen3TTSAudioEncoder: Module {
         self.downsample = ds
         self.quantizer = quant
 
+        Qwen3TTSPipeline.diagnosticLog("--- DIAGNOSTIC: self.items() AFTER assignment ---")
+        for (key, item) in self.items() {
+            Qwen3TTSPipeline.diagnosticLog("Key: \(key) -> Item: \(item)")
+        }
+
         let parameters = ModuleParameters.unflattened(sanitized)
         
         Qwen3TTSPipeline.diagnosticLog("--- DIAGNOSTIC: Unflattened Top-Level Keys ---")
