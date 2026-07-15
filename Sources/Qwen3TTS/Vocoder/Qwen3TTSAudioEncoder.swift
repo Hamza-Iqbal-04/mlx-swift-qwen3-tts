@@ -461,18 +461,13 @@ nonisolated public class EncoderSplitResidualVectorQuantizer: Module {
 /// Architecture: MimiModel encoder (SEANet pattern)
 /// Forward pass: audio [B, 1, L] -> CNN encoder -> transformer -> downsample -> quantizer -> codes [B, 16, T]
 nonisolated public class Qwen3TTSAudioEncoder: Module {
-    private var encoder: MimiSEANetEncoder?
-    private var encoderTransformer: EncoderTransformer?
-    private var downsample: EncoderDownsample?
-    private var quantizer: EncoderSplitResidualVectorQuantizer?
-    private var validNumQuantizers: Int = 16
+    private let encoder: MimiSEANetEncoder
+    private let encoderTransformer: EncoderTransformer
+    private let downsample: EncoderDownsample
+    private let quantizer: EncoderSplitResidualVectorQuantizer
+    private let validNumQuantizers: Int
 
-    public override init() {
-        super.init()
-    }
-
-    /// Load encoder weights from the speech tokenizer safetensors file.
-    public func loadWeights(from weightsURL: URL, configURL: URL) throws {
+    public init(configURL: URL) throws {
         // Parse encoder config from the speech tokenizer config
         let configData = try Data(contentsOf: configURL)
         let tokenizerConfig = try JSONDecoder().decode(AudioDecoderConfig.self, from: configData)
@@ -487,51 +482,28 @@ nonisolated public class Qwen3TTSAudioEncoder: Module {
         self.validNumQuantizers = tokenizerConfig.encoder_valid_num_quantizers ?? 16
 
         // Create modules
-        let enc = MimiSEANetEncoder(config: encoderConfig)
-        let transformer = EncoderTransformer(config: encoderConfig)
-        let ds = EncoderDownsample(config: encoderConfig)
-        let quant = EncoderSplitResidualVectorQuantizer(config: encoderConfig)
+        self.encoder = MimiSEANetEncoder(config: encoderConfig)
+        self.encoderTransformer = EncoderTransformer(config: encoderConfig)
+        self.downsample = EncoderDownsample(config: encoderConfig)
+        self.quantizer = EncoderSplitResidualVectorQuantizer(config: encoderConfig)
+
+        super.init()
 
         // Evaluate random init weights first
-        eval(enc.parameters())
-        eval(transformer.parameters())
-        eval(ds.parameters())
-        eval(quant.parameters())
+        eval(self.encoder.parameters())
+        eval(self.encoderTransformer.parameters())
+        eval(self.downsample.parameters())
+        eval(self.quantizer.parameters())
         Memory.clearCache()
+    }
 
+    /// Load encoder weights from the speech tokenizer safetensors file.
+    public func loadWeights(from weightsURL: URL) throws {
         // Load and sanitize weights
         let allWeights = try MLX.loadArrays(url: weightsURL, stream: .cpu)
         let sanitized = Qwen3TTSAudioEncoder.sanitizeEncoderWeights(allWeights)
 
-        Qwen3TTSPipeline.diagnosticLog("--- DIAGNOSTIC: Sanitized Keys (First 20) ---")
-        for k in Array(sanitized.keys).sorted().prefix(20) {
-            Qwen3TTSPipeline.diagnosticLog(k)
-        }
-
-        // Load into a container module that holds all submodules
-        self.encoder = enc
-        self.encoderTransformer = transformer
-        self.downsample = ds
-        self.quantizer = quant
-
-        Qwen3TTSPipeline.diagnosticLog("--- DIAGNOSTIC: self.items() AFTER assignment ---")
-        for (key, item) in self.items() {
-            Qwen3TTSPipeline.diagnosticLog("Key: \(key) -> Item: \(item)")
-        }
-
         let parameters = ModuleParameters.unflattened(sanitized)
-        
-        Qwen3TTSPipeline.diagnosticLog("--- DIAGNOSTIC: Unflattened Top-Level Keys ---")
-        Qwen3TTSPipeline.diagnosticLog("(Top level keys are inferred from sanitized flat keys)")
-        
-        Qwen3TTSPipeline.diagnosticLog("--- DIAGNOSTIC: Qwen3TTSAudioEncoder Properties ---")
-        let mirror = Mirror(reflecting: self)
-        for child in mirror.children {
-            if let label = child.label {
-                Qwen3TTSPipeline.diagnosticLog(label)
-            }
-        }
-
         try self.update(parameters: parameters, verify: .noUnusedKeys)
 
         Memory.clearCache()
@@ -545,13 +517,6 @@ nonisolated public class Qwen3TTSAudioEncoder: Module {
     }
 
     public func callAsFunction(_ x: MLXArray) -> MLXArray {
-        guard let encoder = encoder,
-              let encoderTransformer = encoderTransformer,
-              let downsample = downsample,
-              let quantizer = quantizer else {
-            return x
-        }
-
         // Ensure input is [B, 1, L]
         var h = x
         if h.ndim == 2 {
