@@ -581,9 +581,9 @@ nonisolated public class Qwen3TTSAudioEncoder: Module {
 
             let workingKey = String(key.dropFirst("encoder.".count))
 
-            // Handle codebook data (cluster_usage + embedding_sum -> embed.weight)
-            if workingKey.contains("_codebook.cluster_usage") || workingKey.contains("_codebook.embedding_sum") {
-                let parts = workingKey.components(separatedBy: "._codebook.")
+            // Handle codebook data (cluster_usage + embed_sum -> embed.weight)
+            if workingKey.contains(".codebook.cluster_usage") || workingKey.contains(".codebook.embed_sum") {
+                let parts = workingKey.components(separatedBy: ".codebook.")
                 if parts.count == 2 {
                     let basePath = parts[0]
                     if codebookData[basePath] == nil {
@@ -592,9 +592,14 @@ nonisolated public class Qwen3TTSAudioEncoder: Module {
                     if workingKey.contains("cluster_usage") {
                         codebookData[basePath]?["cluster_usage"] = v
                     } else {
-                        codebookData[basePath]?["embedding_sum"] = v
+                        codebookData[basePath]?["embed_sum"] = v
                     }
                 }
+                continue
+            }
+
+            // Explicitly ignore training metadata
+            if workingKey.contains(".codebook.initialized") {
                 continue
             }
 
@@ -617,11 +622,11 @@ nonisolated public class Qwen3TTSAudioEncoder: Module {
             sanitized[newKey] = v
         }
 
-        // Compute codebook embeddings from cluster_usage + embedding_sum
+        // Compute codebook embeddings from cluster_usage + embed_sum
         let eps: Float = 1e-5
         for (basePath, data) in codebookData {
             if let clusterUsage = data["cluster_usage"],
-               let embeddingSum = data["embedding_sum"] {
+               let embeddingSum = data["embed_sum"] {
                 let usage = clip(clusterUsage, min: eps, max: Float.greatestFiniteMagnitude)
                 let embedding = embeddingSum / usage.expandedDimensions(axis: -1)
 
