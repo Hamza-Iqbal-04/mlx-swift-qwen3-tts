@@ -509,14 +509,29 @@ nonisolated public class EuclideanCodebook: Module {
     /// - Parameter x: Input tensor [B, T, dim]
     /// - Returns: Indices tensor [B, T] of Int32
     public func encode(_ x: MLXArray) -> MLXArray {
+        Qwen3TTSPipeline.diagnosticLog("EuclideanCodebook.encode: Enter. Input shape: \(x.shape)")
         let embedWeight = embed.weight  // [codebookSize, dim]
+        
+        Qwen3TTSPipeline.diagnosticLog("EuclideanCodebook.encode: Before xSq")
         // L2 distance: ||x - e||^2 = ||x||^2 - 2*x·e + ||e||^2
         let xSq = sum(x * x, axis: -1, keepDims: true)               // [B, T, 1]
+        
+        Qwen3TTSPipeline.diagnosticLog("EuclideanCodebook.encode: Before eSq")
         let eSq = sum(embedWeight * embedWeight, axis: -1, keepDims: false)  // [codebookSize]
+        Qwen3TTSPipeline.diagnosticLog("EuclideanCodebook.encode: Before dot")
         let dot = matmul(x, embedWeight.transposed())             // [B, T, codebookSize]
+        
+        Qwen3TTSPipeline.diagnosticLog("EuclideanCodebook.encode: Before two allocation")
         let two = MLXArray(2.0).asType(dot.dtype)
+        
+        Qwen3TTSPipeline.diagnosticLog("EuclideanCodebook.encode: Before dist")
         let dist = xSq - (two * dot) + eSq  // broadcast eSq to [B, T, codebookSize]
-        return argMin(dist, axis: -1).asType(.int32)                  // [B, T]
+        
+        Qwen3TTSPipeline.diagnosticLog("EuclideanCodebook.encode: Before argMin")
+        let result = argMin(dist, axis: -1).asType(.int32)                  // [B, T]
+        
+        Qwen3TTSPipeline.diagnosticLog("EuclideanCodebook.encode: Exit")
+        return result
     }
 }
 

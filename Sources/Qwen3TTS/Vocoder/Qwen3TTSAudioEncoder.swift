@@ -371,8 +371,17 @@ nonisolated public class EncoderVectorQuantization: Module {
     /// - Parameter x: [B, T, dim]
     /// - Returns: (indices [B, T], quantized [B, T, dim])
     public func encode(_ x: MLXArray) -> (MLXArray, MLXArray) {
+        Qwen3TTSPipeline.diagnosticLog("EncoderVectorQuantization.encode: Enter")
+        
+        Qwen3TTSPipeline.diagnosticLog("EncoderVectorQuantization.encode: Before codebook.encode")
         let indices = codebook.encode(x)       // [B, T]
+        Qwen3TTSPipeline.diagnosticLog("EncoderVectorQuantization.encode: After codebook.encode")
+        
+        Qwen3TTSPipeline.diagnosticLog("EncoderVectorQuantization.encode: Before codebook.decode")
         let quantized = codebook.decode(indices) // [B, T, dim]
+        Qwen3TTSPipeline.diagnosticLog("EncoderVectorQuantization.encode: After codebook.decode")
+        
+        Qwen3TTSPipeline.diagnosticLog("EncoderVectorQuantization.encode: Exit")
         return (indices, quantized)
     }
 }
@@ -398,19 +407,32 @@ nonisolated public class EncoderResidualVectorQuantizer: Module {
     /// - Parameter x: [B, C, T] (channels-first)
     /// - Returns: codes [numQuantizers, B, T]
     public func encode(_ x: MLXArray) -> MLXArray {
+        Qwen3TTSPipeline.diagnosticLog("EncoderResidualVectorQuantizer.encode: Enter")
+        
+        Qwen3TTSPipeline.diagnosticLog("EncoderResidualVectorQuantizer.encode: Before transpose x")
         // Project input: Conv1d expects [B, T, C]
         var projected = x.transposed(0, 2, 1)   // [B, T, C]
+        
+        Qwen3TTSPipeline.diagnosticLog("EncoderResidualVectorQuantizer.encode: Before inputProj")
         projected = inputProj(projected)          // [B, T, dim]
+        Qwen3TTSPipeline.diagnosticLog("EncoderResidualVectorQuantizer.encode: After inputProj")
 
         var residual = projected
         var allCodes: [MLXArray] = []
 
-        for layer in layers {
+        for (i, layer) in layers.enumerated() {
+            Qwen3TTSPipeline.diagnosticLog("EncoderResidualVectorQuantizer.encode: Before layer[\(i)].encode")
             let (indices, quantized) = layer.encode(residual)  // indices: [B, T]
+            Qwen3TTSPipeline.diagnosticLog("EncoderResidualVectorQuantizer.encode: After layer[\(i)].encode")
+            
             allCodes.append(indices)
+            
+            Qwen3TTSPipeline.diagnosticLog("EncoderResidualVectorQuantizer.encode: Before residual subtraction for layer \(i)")
             residual = residual - quantized
+            Qwen3TTSPipeline.diagnosticLog("EncoderResidualVectorQuantizer.encode: After residual subtraction for layer \(i)")
         }
 
+        Qwen3TTSPipeline.diagnosticLog("EncoderResidualVectorQuantizer.encode: Before stacked and exit")
         return stacked(allCodes, axis: 0)  // [numQuantizers, B, T]
     }
 }
@@ -445,9 +467,21 @@ nonisolated public class EncoderSplitResidualVectorQuantizer: Module {
     /// - Parameter x: [B, C, T] (channels-first)
     /// - Returns: codes [B, numQuantizers, T]
     public func encode(_ x: MLXArray) -> MLXArray {
+        Qwen3TTSPipeline.diagnosticLog("EncoderSplitResidualVectorQuantizer.encode: Enter")
+        
+        Qwen3TTSPipeline.diagnosticLog("EncoderSplitResidualVectorQuantizer.encode: Before semanticResidualVectorQuantizer.encode")
         let semanticCodes = semanticResidualVectorQuantizer.encode(x)  // [nQSemantic, B, T]
+        Qwen3TTSPipeline.diagnosticLog("EncoderSplitResidualVectorQuantizer.encode: After semanticResidualVectorQuantizer.encode")
+        
+        Qwen3TTSPipeline.diagnosticLog("EncoderSplitResidualVectorQuantizer.encode: Before acousticResidualVectorQuantizer.encode")
         let acousticCodes = acousticResidualVectorQuantizer.encode(x)  // [nQAcoustic, B, T]
+        Qwen3TTSPipeline.diagnosticLog("EncoderSplitResidualVectorQuantizer.encode: After acousticResidualVectorQuantizer.encode")
+        
+        Qwen3TTSPipeline.diagnosticLog("EncoderSplitResidualVectorQuantizer.encode: Before concatenated")
         let allCodes = concatenated([semanticCodes, acousticCodes], axis: 0) // [numQ, B, T]
+        Qwen3TTSPipeline.diagnosticLog("EncoderSplitResidualVectorQuantizer.encode: After concatenated")
+        
+        Qwen3TTSPipeline.diagnosticLog("EncoderSplitResidualVectorQuantizer.encode: Before transpose and exit")
         return allCodes.transposed(1, 0, 2)  // [B, numQ, T]
     }
 }
