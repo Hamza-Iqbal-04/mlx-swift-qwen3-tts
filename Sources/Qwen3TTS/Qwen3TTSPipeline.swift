@@ -208,13 +208,24 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
             }
 
             // Load audio encoder for ICL (optional)
+            Qwen3TTSPipeline.diagnosticLog("Before creating Qwen3TTSAudioEncoder.")
             var audioEncoder: Qwen3TTSAudioEncoder? = nil
             do {
                 let encoder = Qwen3TTSAudioEncoder()
+                Qwen3TTSPipeline.diagnosticLog("Before encoder.loadWeights(...)")
                 try encoder.loadWeights(from: speechWeightsURL, configURL: speechConfigURL)
+                Qwen3TTSPipeline.diagnosticLog("After encoder.loadWeights(...) succeeded")
                 audioEncoder = encoder
             } catch {
-                // ICL mode unavailable
+                Qwen3TTSPipeline.diagnosticLog("Audio encoder load failed:")
+                Qwen3TTSPipeline.diagnosticLog("\(error)")
+                Qwen3TTSPipeline.diagnosticLog(error.localizedDescription)
+            }
+            
+            if audioEncoder == nil {
+                Qwen3TTSPipeline.diagnosticLog("pipeline.audioEncoder is nil after initialization")
+            } else {
+                Qwen3TTSPipeline.diagnosticLog("pipeline.audioEncoder is non-nil after initialization")
             }
 
             DeviceSelector.synchronizeIfNeeded(device: device)
