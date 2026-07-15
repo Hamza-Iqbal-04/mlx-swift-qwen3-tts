@@ -241,51 +241,7 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
         self.audioEncoder = result.4
         self.config = result.5
         
-        // --- START MLX CONV_TRANSPOSED1D PRIMITIVE DIAGNOSTIC ---
-        Qwen3TTSPipeline.diagnosticLog("--- STARTING MLX CONV_TRANSPOSED1D STRIDE DIAGNOSTIC ---")
-        Device.withDefaultDevice(self.device) {
-            
-            func runEvalWithMemory(_ array: MLXArray, label: String) {
-                Qwen3TTSPipeline.diagnosticLog("\(label) Before eval. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
-                Thread.sleep(forTimeInterval: 0.05)
-                eval(array)
-                Qwen3TTSPipeline.diagnosticLog("\(label) After eval. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
-                Thread.sleep(forTimeInterval: 0.05)
-            }
-            
-            let diagConv = ConvTransposed1d(inputChannels: 192, outputChannels: 96, kernelSize: 6, stride: 3, padding: 0)
-            eval([diagConv.weight, diagConv.bias].compactMap { $0 })
-            
-            // Test 1: Contiguous tensor
-            Qwen3TTSPipeline.diagnosticLog("=== Test 1: Contiguous Tensor ===")
-            let testContiguous = MLXArray.zeros([1, 20480, 192], dtype: .float32)
-            eval(testContiguous)
-            Qwen3TTSPipeline.diagnosticLog("Test 1 input: shape \(testContiguous.shape), dtype \(testContiguous.dtype)")
-            let resContiguous = diagConv(testContiguous)
-            runEvalWithMemory(resContiguous, label: "Test 1 [1, 20480, 192]")
-            
-            // Test 2: Transposed view forced contiguous
-            Qwen3TTSPipeline.diagnosticLog("=== Test 2: Transposed View -> Forced Contiguous ===")
-            let testStridedForced = MLXArray.zeros([1, 192, 20480], dtype: .float32).transposed(0, 2, 1)
-            eval(testStridedForced)
-            Qwen3TTSPipeline.diagnosticLog("Test 2 (Before contiguous): shape \(testStridedForced.shape), dtype \(testStridedForced.dtype)")
-            
-            let testForcedContiguous = contiguous(testStridedForced)
-            eval(testForcedContiguous)
-            Qwen3TTSPipeline.diagnosticLog("Test 2 (After contiguous): shape \(testForcedContiguous.shape), dtype \(testForcedContiguous.dtype)")
-            
-            let resForcedContiguous = diagConv(testForcedContiguous)
-            runEvalWithMemory(resForcedContiguous, label: "Test 2 [1, 20480, 192] Forced Contiguous")
-            
-            // Test 3: Transposed strided view (Mimics production bug)
-            Qwen3TTSPipeline.diagnosticLog("=== Test 3: Transposed Strided View ===")
-            let testStrided = MLXArray.zeros([1, 192, 20480], dtype: .float32).transposed(0, 2, 1)
-            eval(testStrided)
-            Qwen3TTSPipeline.diagnosticLog("Test 3 input: shape \(testStrided.shape), dtype \(testStrided.dtype)")
-            let resStrided = diagConv(testStrided)
-            runEvalWithMemory(resStrided, label: "Test 3 [1, 20480, 192] Strided View")
-        }
-        Qwen3TTSPipeline.diagnosticLog("--- END MLX CONV_TRANSPOSED1D PRIMITIVE DIAGNOSTIC ---")
+        // Diagnostic block removed in favor of in-pipeline diagnostics
     }
 
     // MARK: - Simple Generation

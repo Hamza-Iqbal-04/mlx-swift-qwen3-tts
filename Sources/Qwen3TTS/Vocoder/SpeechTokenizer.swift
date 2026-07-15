@@ -759,54 +759,80 @@ nonisolated public class DecoderBlockUpsample: Module {
     }
 
     public func callAsFunction(_ x: MLXArray) -> MLXArray {
-        if upsampleRate == 3 {
-            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Enter. Input shape: \(x.shape), dtype: \(x.dtype)")
-        }
+        var result = x
         
         if upsampleRate == 3 {
-            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Before initial transpose(0,2,1). Input shape: \(x.shape), dtype: \(x.dtype)")
+            Qwen3TTSPipeline.diagnosticLog("==== DECODER DIAGNOSTIC BUNDLE (Upsample 3) ====")
+            Qwen3TTSPipeline.diagnosticLog("Before transpose: shape \(result.shape), dtype \(result.dtype), ndim \(result.ndim).")
+            Thread.sleep(forTimeInterval: 0.05)
         }
-        var result = x.transposed(0, 2, 1)
+        
+        result = result.transposed(0, 2, 1)
+
         if upsampleRate == 3 {
+            Qwen3TTSPipeline.diagnosticLog("After transpose: shape \(result.shape), dtype \(result.dtype), ndim \(result.ndim).")
+            Thread.sleep(forTimeInterval: 0.05)
+            
+            // 1. eval(raw production tensor only)
+            Qwen3TTSPipeline.diagnosticLog("Step 1: eval(production_tensor) only. Mem: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB()))")
+            Thread.sleep(forTimeInterval: 0.05)
             eval(result)
-            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): After initial transpose(0,2,1). Shape: \(result.shape), dtype: \(result.dtype)")
-        }
-        
-        if upsampleRate == 3 {
-            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Before ConvTransposed1d. Input shape: \(result.shape), dtype: \(result.dtype)")
-        }
-        result = self.conv(result)
-        if upsampleRate == 3 {
+            Qwen3TTSPipeline.diagnosticLog("Step 1: SUCCEEDED. Mem: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB()))")
+            Thread.sleep(forTimeInterval: 0.05)
+            
+            // 2. contiguous copy -> ConvTransposed1d -> eval
+            Qwen3TTSPipeline.diagnosticLog("Step 2: contiguous(result) -> ConvTransposed1d -> eval. Mem: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB()))")
+            Thread.sleep(forTimeInterval: 0.05)
+            let resultContiguous = contiguous(result)
+            let convContiguous = self.conv(resultContiguous)
+            eval(convContiguous)
+            Qwen3TTSPipeline.diagnosticLog("Step 2: SUCCEEDED. Mem: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB()))")
+            Thread.sleep(forTimeInterval: 0.05)
+            
+            // 3. copied tensor (+0) -> ConvTransposed1d -> eval
+            Qwen3TTSPipeline.diagnosticLog("Step 3: safe copy (+ 0) -> ConvTransposed1d -> eval. Mem: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB()))")
+            Thread.sleep(forTimeInterval: 0.05)
+            let resultCopied = result + 0.0
+            let convSafe = self.conv(resultCopied)
+            eval(convSafe)
+            Qwen3TTSPipeline.diagnosticLog("Step 3: SUCCEEDED. Mem: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB()))")
+            Thread.sleep(forTimeInterval: 0.05)
+            
+            // 4. raw production tensor -> ConvTransposed1d -> eval (EXPECTED CRASH)
+            Qwen3TTSPipeline.diagnosticLog("Step 4: raw production tensor -> ConvTransposed1d -> eval (MIMICS CRASH). Mem: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB()))")
+            Thread.sleep(forTimeInterval: 0.05)
+            result = self.conv(result)
+            Qwen3TTSPipeline.diagnosticLog("Step 4: Raw tensor graph construction succeeded.")
+            Thread.sleep(forTimeInterval: 0.05)
             eval(result)
-            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): After ConvTransposed1d. Shape: \(result.shape), dtype: \(result.dtype)")
+            Qwen3TTSPipeline.diagnosticLog("Step 4: Raw tensor evaluation SUCCEEDED. Mem: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB()))")
+            Thread.sleep(forTimeInterval: 0.05)
+        } else {
+            result = self.conv(result)
         }
-        
+
         if upsampleRate == 3 {
-            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Before final transpose(0,2,1). Input shape: \(result.shape), dtype: \(result.dtype)")
+            Qwen3TTSPipeline.diagnosticLog("Before final transpose. Mem: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB()))")
+            Thread.sleep(forTimeInterval: 0.05)
         }
         result = result.transposed(0, 2, 1)
-        if upsampleRate == 3 {
-            eval(result)
-            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): After final transpose(0,2,1). Shape: \(result.shape), dtype: \(result.dtype)")
-        }
 
         if trimRight > 0 {
             let timeLen = result.shape[2]
             let endIdx = timeLen - trimRight
             if endIdx > 0 {
                 if upsampleRate == 3 {
-                    Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Before crop [0..<endIdx]. Input shape: \(result.shape), dtype: \(result.dtype)")
+                    Qwen3TTSPipeline.diagnosticLog("Before crop. Mem: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB()))")
+                    Thread.sleep(forTimeInterval: 0.05)
                 }
                 result = result[0..., 0..., 0..<endIdx]
                 if upsampleRate == 3 {
                     eval(result)
-                    Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): After crop [0..<endIdx]. Shape: \(result.shape), dtype: \(result.dtype)")
+                    Qwen3TTSPipeline.diagnosticLog("After crop. Mem: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB()))")
+                    Thread.sleep(forTimeInterval: 0.05)
+                    Qwen3TTSPipeline.diagnosticLog("==== END DECODER DIAGNOSTIC BUNDLE ====")
                 }
             }
-        }
-        
-        if upsampleRate == 3 {
-            Qwen3TTSPipeline.diagnosticLog("DecoderBlockUpsample(3): Exit")
         }
         return result
     }
