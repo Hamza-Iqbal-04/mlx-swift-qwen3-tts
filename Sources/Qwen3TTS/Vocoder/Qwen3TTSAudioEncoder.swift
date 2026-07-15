@@ -503,6 +503,11 @@ nonisolated public class Qwen3TTSAudioEncoder: Module {
         let allWeights = try MLX.loadArrays(url: weightsURL, stream: .cpu)
         let sanitized = Qwen3TTSAudioEncoder.sanitizeEncoderWeights(allWeights)
 
+        Qwen3TTSPipeline.diagnosticLog("--- DIAGNOSTIC: Sanitized Keys (First 20) ---")
+        for k in Array(sanitized.keys).sorted().prefix(20) {
+            Qwen3TTSPipeline.diagnosticLog(k)
+        }
+
         // Load into a container module that holds all submodules
         self.encoder = enc
         self.encoderTransformer = transformer
@@ -510,6 +515,22 @@ nonisolated public class Qwen3TTSAudioEncoder: Module {
         self.quantizer = quant
 
         let parameters = ModuleParameters.unflattened(sanitized)
+        
+        Qwen3TTSPipeline.diagnosticLog("--- DIAGNOSTIC: Unflattened Top-Level Keys ---")
+        if case .dict(let dict) = parameters {
+            for k in dict.keys.sorted() {
+                Qwen3TTSPipeline.diagnosticLog(k)
+            }
+        }
+        
+        Qwen3TTSPipeline.diagnosticLog("--- DIAGNOSTIC: Qwen3TTSAudioEncoder Properties ---")
+        let mirror = Mirror(reflecting: self)
+        for child in mirror.children {
+            if let label = child.label {
+                Qwen3TTSPipeline.diagnosticLog(label)
+            }
+        }
+
         try self.update(parameters: parameters, verify: .noUnusedKeys)
 
         Memory.clearCache()
@@ -580,13 +601,24 @@ nonisolated public class Qwen3TTSAudioEncoder: Module {
         var sanitized: [String: MLXArray] = [:]
         var codebookData: [String: [String: MLXArray]] = [:]
 
+        Qwen3TTSPipeline.diagnosticLog("--- DIAGNOSTIC: Original Safetensor Keys (First 20) ---")
+        let originalKeys = Array(weights.keys).sorted().prefix(20)
+        for k in originalKeys {
+            Qwen3TTSPipeline.diagnosticLog(k)
+        }
+
+        let allowedPrefixes = ["encoder.", "encoder_transformer.", "downsample.", "quantizer."]
+
         for (key, value) in weights {
             var v = value
 
-            // Only keep encoder.* keys
-            guard key.hasPrefix("encoder.") else { continue }
+            // Keep all encoder submodules
+            guard allowedPrefixes.contains(where: { key.hasPrefix($0) }) else { continue }
 
-            let workingKey = String(key.dropFirst("encoder.".count))
+            // DO NOT drop the prefix. The ModuleParameters.unflattened requires the top-level 
+            // module namespaces (encoder, encoderTransformer, downsample, quantizer)
+            // to correctly map to the properties of Qwen3TTSAudioEncoder.
+            let workingKey = key
 
             // Handle codebook data (cluster_usage + embedding_sum -> embed.weight)
             if workingKey.contains("_codebook.cluster_usage") || workingKey.contains("_codebook.embedding_sum") {
