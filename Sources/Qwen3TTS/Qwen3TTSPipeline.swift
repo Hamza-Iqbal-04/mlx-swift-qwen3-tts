@@ -260,7 +260,7 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
             Qwen3TTSPipeline.diagnosticLog("=== Test 1: Contiguous Tensor ===")
             let testContiguous = MLXArray.zeros([1, 20480, 192], dtype: .float32)
             eval(testContiguous)
-            Qwen3TTSPipeline.diagnosticLog("Test 1 input: shape \(testContiguous.shape), strides \(testContiguous.internalStrides)")
+            Qwen3TTSPipeline.diagnosticLog("Test 1 input: shape \(testContiguous.shape), dtype \(testContiguous.dtype)")
             let resContiguous = diagConv(testContiguous)
             runEvalWithMemory(resContiguous, label: "Test 1 [1, 20480, 192]")
             
@@ -268,11 +268,11 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
             Qwen3TTSPipeline.diagnosticLog("=== Test 2: Transposed View -> Forced Contiguous ===")
             let testStridedForced = MLXArray.zeros([1, 192, 20480], dtype: .float32).transposed(0, 2, 1)
             eval(testStridedForced)
-            Qwen3TTSPipeline.diagnosticLog("Test 2 (Before contiguous): shape \(testStridedForced.shape), strides \(testStridedForced.internalStrides)")
+            Qwen3TTSPipeline.diagnosticLog("Test 2 (Before contiguous): shape \(testStridedForced.shape), dtype \(testStridedForced.dtype)")
             
             let testForcedContiguous = contiguous(testStridedForced)
             eval(testForcedContiguous)
-            Qwen3TTSPipeline.diagnosticLog("Test 2 (After contiguous): shape \(testForcedContiguous.shape), strides \(testForcedContiguous.internalStrides)")
+            Qwen3TTSPipeline.diagnosticLog("Test 2 (After contiguous): shape \(testForcedContiguous.shape), dtype \(testForcedContiguous.dtype)")
             
             let resForcedContiguous = diagConv(testForcedContiguous)
             runEvalWithMemory(resForcedContiguous, label: "Test 2 [1, 20480, 192] Forced Contiguous")
@@ -281,7 +281,7 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
             Qwen3TTSPipeline.diagnosticLog("=== Test 3: Transposed Strided View ===")
             let testStrided = MLXArray.zeros([1, 192, 20480], dtype: .float32).transposed(0, 2, 1)
             eval(testStrided)
-            Qwen3TTSPipeline.diagnosticLog("Test 3 input: shape \(testStrided.shape), strides \(testStrided.internalStrides)")
+            Qwen3TTSPipeline.diagnosticLog("Test 3 input: shape \(testStrided.shape), dtype \(testStrided.dtype)")
             let resStrided = diagConv(testStrided)
             runEvalWithMemory(resStrided, label: "Test 3 [1, 20480, 192] Strided View")
         }
