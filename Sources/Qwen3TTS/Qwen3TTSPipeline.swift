@@ -571,10 +571,27 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                             Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: Before decoder")
                             let audio = capturedDecoder.mlxDecode(codes: codesArray)
                             Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: After decoder")
+                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: Decoder output shape: \(audio.shape), dtype: \(audio.dtype)")
                             
+                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: Before reshape")
                             let flatAudio = audio.reshaped([-1])
+                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: After reshape")
+                            
+                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: Before eval")
                             eval(flatAudio)
-                            return flatAudio.asArray(Float.self)
+                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: After eval")
+                            
+                            var safeAudio = flatAudio
+                            if safeAudio.dtype != .float32 {
+                                Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: Casting decoder output to float32")
+                                safeAudio = safeAudio.asType(.float32)
+                            }
+                            
+                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: Before asArray")
+                            let array = safeAudio.asArray(Float.self)
+                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: After asArray")
+                            
+                            return array
                         }
 
                         let contextSamplesToDrop = leftContext.count * SAMPLES_PER_FRAME
@@ -883,16 +900,32 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                         Qwen3TTSPipeline.diagnosticLog("generateBatch: Before decoder")
                         let audio = self.decoder.mlxDecode(codes: codesArray)
                         Qwen3TTSPipeline.diagnosticLog("generateBatch: After decoder")
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: Decoder output shape: \(audio.shape), dtype: \(audio.dtype)")
                         
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: Before reshape")
                         let flatAudio = audio.reshaped([-1])
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: After reshape")
+                        
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: Before eval")
                         eval(flatAudio)
-                        var batchSamples = flatAudio.asArray(Float.self)
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: After eval")
+                        
+                        var safeAudio = flatAudio
+                        if safeAudio.dtype != .float32 {
+                            Qwen3TTSPipeline.diagnosticLog("generateBatch: Casting decoder output to float32")
+                            safeAudio = safeAudio.asType(.float32)
+                        }
+                        
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: Before asArray")
+                        var batchSamples = safeAudio.asArray(Float.self)
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: After asArray")
 
                         let contextSamples = decodeLeftContext.count * samplesPerFrame
                         if contextSamples > 0 && batchSamples.count > contextSamples {
                             batchSamples = Array(batchSamples.dropFirst(contextSamples))
                         }
 
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: Before NaN cleanup")
                         for sample in batchSamples {
                             if sample.isNaN || sample.isInfinite {
                                 chunkSamples.append(0.0)
@@ -900,6 +933,7 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                                 chunkSamples.append(max(-1.0, min(1.0, sample)))
                             }
                         }
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: After NaN cleanup")
 
                         decodeLeftContext = Array(codes[max(0, endPos - leftContextSize)..<endPos])
                         pos = endPos
@@ -911,6 +945,7 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                     guard !chunkSamples.isEmpty else { continue }
 
                     // Crossfade with previous chunk
+                    Qwen3TTSPipeline.diagnosticLog("generateBatch: Before crossfade")
                     if !previousTail.isEmpty && crossfade > 0 {
                         let fadeLength = min(crossfade, previousTail.count, chunkSamples.count)
                         var crossfaded: [Float] = []
@@ -931,6 +966,7 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                     } else {
                         previousTail = chunkSamples
                     }
+                    Qwen3TTSPipeline.diagnosticLog("generateBatch: After crossfade")
 
                     DeviceSelector.synchronizeIfNeeded(device: self.device)
                     Memory.clearCache()
