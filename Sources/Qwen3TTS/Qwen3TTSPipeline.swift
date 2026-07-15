@@ -18,6 +18,14 @@ public struct AudioChunk: Sendable {
     }
 }
 
+public enum MemoryStrategy: Sendable {
+    case chunk
+    case endOnly
+    case none
+}
+
+public let memoryStrategy: MemoryStrategy = .none
+
 /// Configuration for the Qwen3 TTS pipeline.
 public struct Qwen3TTSPipelineConfiguration: Sendable {
     /// Whether to apply mixed quantization at runtime (for non-pre-quantized models).
@@ -836,13 +844,17 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
 
         let embeddingData = speakerEmbedding
 
+        Qwen3TTSPipeline.diagnosticLog("generateBatch: Starting with MemoryStrategy = \(memoryStrategy)")
+
         return await Task.detached(priority: .userInitiated) { [self] () -> [Float] in
             Device.withDefaultDevice(self.device) {
                 defer {
                     model.clearGenerationCache()
                     decoder.clearCompiledCache()
-                    DeviceSelector.synchronizeIfNeeded(device: self.device)
-                    Memory.clearCache()
+                    if memoryStrategy != .none {
+                        DeviceSelector.synchronizeIfNeeded(device: self.device)
+                        Memory.clearCache()
+                    }
                 }
                 var allSamples: [Float] = []
                 var previousTail: [Float] = []
@@ -940,8 +952,10 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                         decodeLeftContext = Array(codes[max(0, endPos - leftContextSize)..<endPos])
                         pos = endPos
 
-                        DeviceSelector.synchronizeIfNeeded(device: self.device)
-                        Memory.clearCache()
+                        if memoryStrategy == .chunk {
+                            DeviceSelector.synchronizeIfNeeded(device: self.device)
+                            Memory.clearCache()
+                        }
                     }
 
                     guard !chunkSamples.isEmpty else { continue }
@@ -970,8 +984,10 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                     }
                     Qwen3TTSPipeline.diagnosticLog("generateBatch: After crossfade")
 
-                    DeviceSelector.synchronizeIfNeeded(device: self.device)
-                    Memory.clearCache()
+                    if memoryStrategy == .chunk {
+                        DeviceSelector.synchronizeIfNeeded(device: self.device)
+                        Memory.clearCache()
+                    }
                 }
 
                 onProgress?(1.0)
