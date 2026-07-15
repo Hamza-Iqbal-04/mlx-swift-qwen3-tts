@@ -619,7 +619,12 @@ nonisolated public class Qwen3TTSAudioEncoder: Module {
                 v = v.transposed(0, 2, 1)
             }
 
-            sanitized[newKey] = v
+            var finalKey = newKey
+            if finalKey.hasPrefix("downsample.conv.") {
+                finalKey = finalKey.replacingOccurrences(of: "downsample.conv.", with: "downsample.conv.conv.")
+            }
+            
+            sanitized[finalKey] = v
         }
 
         // Compute codebook embeddings from cluster_usage + embed_sum
