@@ -768,8 +768,10 @@ nonisolated public class DecoderBlockUpsample: Module {
 
 nonisolated public class DecoderBlock: Module {
     let block: [Module]
+    let layerIdx: Int
 
     public init(config: Qwen3TTSTokenizerDecoderConfig, layerIdx: Int) {
+        self.layerIdx = layerIdx
         let inDim = config.decoder_dim / Int(pow(2.0, Double(layerIdx)))
         let outDim = config.decoder_dim / Int(pow(2.0, Double(layerIdx + 1)))
         let upsampleRate = config.upsample_rates[layerIdx]
@@ -786,13 +788,23 @@ nonisolated public class DecoderBlock: Module {
 
     public func callAsFunction(_ x: MLXArray) -> MLXArray {
         var h = x
-        for layer in block {
+        if layerIdx == 3 {
+            Qwen3TTSPipeline.diagnosticLog("DecoderBlock(3): Enter. Input shape: \(h.shape), dtype: \(h.dtype)")
+        }
+        for (i, layer) in block.enumerated() {
+            if layerIdx == 3 {
+                Qwen3TTSPipeline.diagnosticLog("DecoderBlock(3): Before submodule \(i) (\(type(of: layer)))")
+            }
             if let snake = layer as? SnakeBeta {
                 h = snake(h)
             } else if let upsample = layer as? DecoderBlockUpsample {
                 h = upsample(h)
             } else if let residual = layer as? DecoderResidualUnit {
                 h = residual(h)
+            }
+            if layerIdx == 3 {
+                eval(h)
+                Qwen3TTSPipeline.diagnosticLog("DecoderBlock(3): After submodule \(i) (\(type(of: layer))). Output shape: \(h.shape), dtype: \(h.dtype)")
             }
         }
         return h
