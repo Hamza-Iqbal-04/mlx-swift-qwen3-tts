@@ -347,8 +347,13 @@ nonisolated public class Qwen3Talker: Module {
         let debugGenEntry = ProcessInfo.processInfo.environment["DUPER_DEBUG_GENERATION"] == "1"
         if debugGenEntry { print("DEBUG [generateCodes]: entry prompt='\(prompt.prefix(30))' text='\(text.prefix(30))' speakerId=\(speakerId as Any) spkEmbed=\(speakerEmbedding?.shape ?? []) useICL=\(useICL) temp=\(temperature) detailTemp=\(resolvedDetailTemp) code0TopK=\(code0TopK) code0RepPen=\(code0RepetitionPenalty)"); fflush(stdout) }
 
+        Qwen3TTSPipeline.diagnosticLog("generateCodes: Before prompt construction")
         let chatText = "<|im_start|>assistant\n\(text)<|im_end|>\n<|im_start|>assistant\n"
+        Qwen3TTSPipeline.diagnosticLog("generateCodes: After prompt construction")
+
+        Qwen3TTSPipeline.diagnosticLog("generateCodes: Before tokenizer")
         let inputIds = tokenizer.encode(text: chatText).asType(.int32)
+        Qwen3TTSPipeline.diagnosticLog("generateCodes: After tokenizer")
         if debugGenEntry { print("DEBUG [generateCodes]: inputIds shape=\(inputIds.shape)"); fflush(stdout) }
 
         let minTokens = 9
@@ -368,7 +373,10 @@ nonisolated public class Qwen3Talker: Module {
             Int32(config.codec_think_bos_id),
             Int32(config.codec_think_eos_id)
         ]).expandedDimensions(axis: 0)
+        
+        Qwen3TTSPipeline.diagnosticLog("generateCodes: Before codec_embedding(inputIds). Weight dtype: \(codec_embedding.weight.dtype)")
         var codecEmbed = codec_embedding(codecPrefill)
+        Qwen3TTSPipeline.diagnosticLog("generateCodes: After codec_embedding(inputIds). Output dtype: \(codecEmbed.dtype)")
 
         let codecSuffix = MLXArray([Int32(config.codec_pad_id), Int32(config.codec_bos_id)]).expandedDimensions(axis: 0)
         let codecSuffixEmbed = codec_embedding(codecSuffix)
@@ -419,12 +427,14 @@ nonisolated public class Qwen3Talker: Module {
             instructEmbed = text_projection(text_embedding(instructIds))
         }
 
+        Qwen3TTSPipeline.diagnosticLog("generateCodes: Before concatenate inputEmbeds")
         var inputEmbeds: MLXArray
         if let instructEmbedding = instructEmbed {
             inputEmbeds = concatenated([instructEmbedding, roleEmbed, combinedEmbed], axis: 1)
         } else {
             inputEmbeds = concatenated([roleEmbed, combinedEmbed], axis: 1)
         }
+        Qwen3TTSPipeline.diagnosticLog("generateCodes: After concatenate inputEmbeds")
 
         let firstTextEmbed = text_projection(text_embedding(inputIds[0..., 3..<4])) + codecEmbed[0..., (codecEmbed.shape[1]-1)..., 0...]
         inputEmbeds = concatenated([inputEmbeds, firstTextEmbed], axis: 1)
@@ -440,8 +450,10 @@ nonisolated public class Qwen3Talker: Module {
 
         let debugGen = ProcessInfo.processInfo.environment["DUPER_DEBUG_GENERATION"] == "1"
         if debugGen { print("DEBUG [generateCodes]: inputEmbeds shape=\(inputEmbeds.shape) trailingLen=\(trailingLen)") }
+        Qwen3TTSPipeline.diagnosticLog("generateCodes: Before transformer prefill")
         var (h, cache) = self.callAsFunction(inputEmbeds, cache: nil, positionOffset: nil)
         var positionOffset = inputEmbeds.shape[1]
+        Qwen3TTSPipeline.diagnosticLog("generateCodes: After transformer prefill")
         if debugGen { print("DEBUG [generateCodes]: prefill done, h shape=\(h.shape), positionOffset=\(positionOffset)") }
 
         var generatedCodes: [[Int32]] = []
@@ -467,6 +479,7 @@ nonisolated public class Qwen3Talker: Module {
 
         let totalTextTokens = trailingTextHidden.shape[1]
 
+        Qwen3TTSPipeline.diagnosticLog("generateCodes: Before generation loop")
         for step in 0..<maxTokens {
             if Task.isCancelled { break }
             if debugGen && (step < 3 || step % 50 == 0) {
@@ -489,6 +502,10 @@ nonisolated public class Qwen3Talker: Module {
             )
             let code0Value = nextToken[0].item(Int32.self)
             if debugGen && step < 3 { print("DEBUG [generateCodes]: step \(step) code0=\(code0Value)") }
+
+            if step == 0 {
+                Qwen3TTSPipeline.diagnosticLog("generateCodes: After first generated token")
+            }
 
             if code0Value == eosTokenId {
                 break

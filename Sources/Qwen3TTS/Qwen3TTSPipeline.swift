@@ -514,7 +514,19 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
         return AsyncThrowingStream { continuation in
             Task {
                 do {
-                    let speakerEmbed = speakerEmbedding.map { MLXArray($0) }
+                    Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: Before speaker embedding creation")
+                    let targetDtype = capturedModel.codec_embedding.weight.dtype
+                    let speakerEmbed: MLXArray? = speakerEmbedding.map { 
+                        let arr = MLXArray($0)
+                        Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: Speaker embedding dtype: \(arr.dtype), Codec embedding dtype: \(targetDtype)")
+                        if arr.dtype != targetDtype {
+                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: Casting speaker embedding from \(arr.dtype) to \(targetDtype)")
+                            return arr.asType(targetDtype)
+                        }
+                        return arr
+                    }
+                    Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: After speaker embedding creation")
+                    
                     let codeStream = Device.withDefaultDevice(capturedDevice) {
                         capturedModel.generateStream(
                             prompt: speaker,
@@ -555,7 +567,11 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                             }
                             let flatCodes: [Int32] = decodeInput.flatMap { $0 }
                             let codesArray = MLXArray(flatCodes).reshaped([1, decodeInput.count, numCodeGroups])
+                            
+                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: Before decoder")
                             let audio = capturedDecoder.mlxDecode(codes: codesArray)
+                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: After decoder")
+                            
                             let flatAudio = audio.reshaped([-1])
                             eval(flatAudio)
                             return flatAudio.asArray(Float.self)
@@ -811,7 +827,19 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                 }
                 var allSamples: [Float] = []
                 var previousTail: [Float] = []
-                let speakerEmbed: MLXArray? = embeddingData.map { MLXArray($0) }
+                
+                Qwen3TTSPipeline.diagnosticLog("generateBatch: Before speaker embedding creation")
+                let targetDtype = self.model.codec_embedding.weight.dtype
+                let speakerEmbed: MLXArray? = embeddingData.map { 
+                    let arr = MLXArray($0)
+                    Qwen3TTSPipeline.diagnosticLog("generateBatch: Speaker embedding dtype: \(arr.dtype), Codec embedding dtype: \(targetDtype)")
+                    if arr.dtype != targetDtype {
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: Casting speaker embedding from \(arr.dtype) to \(targetDtype)")
+                        return arr.asType(targetDtype)
+                    }
+                    return arr
+                }
+                Qwen3TTSPipeline.diagnosticLog("generateBatch: After speaker embedding creation")
 
                 for (chunkIndex, textChunk) in textChunks.enumerated() {
                     if Task.isCancelled { return allSamples }
@@ -820,6 +848,7 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                     let progress = Float(chunkIndex) / Float(textChunks.count)
                     onProgress?(progress)
 
+                    Qwen3TTSPipeline.diagnosticLog("generateBatch: Chunk \(chunkIndex) BEFORE generateCodes")
                     let codes = self.model.generateCodes(
                         prompt: speaker,
                         text: textChunk,
@@ -831,6 +860,7 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                         temperature: temp,
                         maxTokens: 600
                     )
+                    Qwen3TTSPipeline.diagnosticLog("generateBatch: Chunk \(chunkIndex) AFTER generateCodes (codes count: \(codes.count))")
 
                     guard !codes.isEmpty else { continue }
 
@@ -849,7 +879,11 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
 
                         let flatCodes: [Int32] = batchCodes.flatMap { $0 }
                         let codesArray = MLXArray(flatCodes).reshaped([1, batchCodes.count, numCodeGroups])
+                        
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: Before decoder")
                         let audio = self.decoder.mlxDecode(codes: codesArray)
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: After decoder")
+                        
                         let flatAudio = audio.reshaped([-1])
                         eval(flatAudio)
                         var batchSamples = flatAudio.asArray(Float.self)
