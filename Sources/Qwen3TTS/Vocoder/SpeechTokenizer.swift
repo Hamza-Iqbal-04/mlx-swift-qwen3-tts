@@ -927,13 +927,24 @@ nonisolated public class Qwen3TTSSpeechTokenizerDecoder: Module {
             return MLXArray.zeros([codes.shape[0], 1, 0], dtype: .float32)
         }
 
+        Qwen3TTSPipeline.diagnosticLog("decodeImpl: Enter decodeImpl")
+
         var hidden = quantizer.decode(codes)
+        eval(hidden)
+        Qwen3TTSPipeline.diagnosticLog("decodeImpl: After quantizer.decode")
+
         hidden = preConv(hidden)
+        eval(hidden)
+        Qwen3TTSPipeline.diagnosticLog("decodeImpl: After preConv")
+
         hidden = hidden.transposed(0, 2, 1)
         hidden = preTransformer(hidden)
+        eval(hidden)
+        Qwen3TTSPipeline.diagnosticLog("decodeImpl: After preTransformer")
+
         hidden = hidden.transposed(0, 2, 1)
 
-        for upsampleLayers in upsample {
+        for (i, upsampleLayers) in upsample.enumerated() {
             for layer in upsampleLayers {
                 if let causalTranspose = layer as? CausalTransposeConv1d {
                     hidden = causalTranspose(hidden)
@@ -941,10 +952,12 @@ nonisolated public class Qwen3TTSSpeechTokenizerDecoder: Module {
                     hidden = convNeXt(hidden)
                 }
             }
+            eval(hidden)
+            Qwen3TTSPipeline.diagnosticLog("decodeImpl: After upsample block \(i)")
         }
 
         var wav = hidden
-        for decoderLayer in decoder {
+        for (i, decoderLayer) in decoder.enumerated() {
             if let initialConv = decoderLayer as? DecoderInitialConv {
                 wav = initialConv(wav)
             } else if let decoderBlock = decoderLayer as? DecoderBlock {
@@ -954,9 +967,14 @@ nonisolated public class Qwen3TTSSpeechTokenizerDecoder: Module {
             } else if let outputConv = decoderLayer as? DecoderOutputConv {
                 wav = outputConv(wav)
             }
+            eval(wav)
+            Qwen3TTSPipeline.diagnosticLog("decodeImpl: After decoder stage \(i)")
         }
 
-        return clip(wav, min: -1.0, max: 1.0)
+        let out = clip(wav, min: -1.0, max: 1.0)
+        eval(out)
+        Qwen3TTSPipeline.diagnosticLog("decodeImpl: Before returning output")
+        return out
     }
 
     public func chunkedDecode(_ codes: MLXArray, chunkSize: Int = 100, leftContextSize: Int = 10) -> MLXArray {
