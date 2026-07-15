@@ -577,9 +577,9 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                             let flatAudio = audio.reshaped([-1])
                             Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: After reshape")
                             
-                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: Before eval")
+                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: Before eval. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
                             eval(flatAudio)
-                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: After eval")
+                            Qwen3TTSPipeline.diagnosticLog("_generateStreamImpl: After eval. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
                             
                             var safeAudio = flatAudio
                             if safeAudio.dtype != .float32 {
@@ -906,9 +906,9 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
                         let flatAudio = audio.reshaped([-1])
                         Qwen3TTSPipeline.diagnosticLog("generateBatch: After reshape")
                         
-                        Qwen3TTSPipeline.diagnosticLog("generateBatch: Before eval")
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: Before eval. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
                         eval(flatAudio)
-                        Qwen3TTSPipeline.diagnosticLog("generateBatch: After eval")
+                        Qwen3TTSPipeline.diagnosticLog("generateBatch: After eval. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
                         
                         var safeAudio = flatAudio
                         if safeAudio.dtype != .float32 {
@@ -983,6 +983,26 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
     public static func diagnosticLog(_ message: String) {
         print("[Diagnostic] \(message)")
         onDiagnosticLog?(message)
+        
+        let env = ProcessInfo.processInfo.environment["QWEN3TTS_DIAGNOSTICS"]
+        if env == "1" || env == "true" {
+            print("[Qwen3TTSPipeline] \(message)")
+            fflush(stdout)
+        }
+    }
+
+    public static func getMemoryUsageMB() -> Double {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+        let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        if kerr == KERN_SUCCESS {
+            return Double(info.resident_size) / (1024.0 * 1024.0)
+        }
+        return 0.0
     }
 
     // MARK: - Voice Cloning

@@ -918,16 +918,8 @@ nonisolated public class Qwen3TTSSpeechTokenizerDecoder: Module {
     }
 
     public func callAsFunction(_ codes: MLXArray) -> MLXArray {
-        if ProcessInfo.processInfo.environment["QWEN3TTS_DISABLE_MLX_COMPILE"] == "1" {
-            return decodeImpl(codes)
-        }
-        if compiledDecode == nil {
-            compiledDecode = compile { [weak self] x in
-                guard let self = self else { return x }
-                return self.decodeImpl(x)
-            }
-        }
-        return compiledDecode!(codes)
+        // A/B Test: Disable MLX.compile entirely to check for Metal compiler crash / Jetsam
+        return decodeImpl(codes)
     }
 
     private func decodeImpl(_ codes: MLXArray) -> MLXArray {
