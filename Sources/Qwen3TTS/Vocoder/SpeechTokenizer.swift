@@ -793,7 +793,7 @@ nonisolated public class DecoderBlock: Module {
         }
         for (i, layer) in block.enumerated() {
             if layerIdx == 3 {
-                Qwen3TTSPipeline.diagnosticLog("DecoderBlock(3): Before submodule \(i) (\(type(of: layer)))")
+                Qwen3TTSPipeline.diagnosticLog("DecoderBlock(3): Before submodule \(i) (\(type(of: layer))). Input shape: \(h.shape), dtype: \(h.dtype)")
             }
             if let snake = layer as? SnakeBeta {
                 h = snake(h)
