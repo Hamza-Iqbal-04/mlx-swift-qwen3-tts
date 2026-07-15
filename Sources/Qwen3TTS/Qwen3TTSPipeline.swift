@@ -247,14 +247,18 @@ public final class Qwen3TTSPipeline: @unchecked Sendable {
             
             func runEvalWithMemory(_ array: MLXArray, label: String) {
                 Qwen3TTSPipeline.diagnosticLog("\(label) Before eval. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
+                Thread.sleep(forTimeInterval: 0.05) // Ensure log flush before potential segfault
                 eval(array)
                 Qwen3TTSPipeline.diagnosticLog("\(label) After eval. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
+                Thread.sleep(forTimeInterval: 0.05)
             }
 
             func runEvalWithMemoryForLayer(_ layer: ConvTransposed1d, label: String) {
                 Qwen3TTSPipeline.diagnosticLog("\(label) Before eval parameters. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
+                Thread.sleep(forTimeInterval: 0.05)
                 eval([layer.weight, layer.bias].compactMap { $0 })
                 Qwen3TTSPipeline.diagnosticLog("\(label) After eval parameters. Memory: \(String(format: "%.2f", Qwen3TTSPipeline.getMemoryUsageMB())) MB")
+                Thread.sleep(forTimeInterval: 0.05)
             }
             
             // Test A: Intrinsic shape limit
