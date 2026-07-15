@@ -573,18 +573,13 @@ nonisolated public class Qwen3TTSAudioEncoder: Module {
             Qwen3TTSPipeline.diagnosticLog(k)
         }
 
-        let allowedPrefixes = ["encoder.", "encoder_transformer.", "downsample.", "quantizer."]
-
         for (key, value) in weights {
             var v = value
 
-            // Keep all encoder submodules
-            guard allowedPrefixes.contains(where: { key.hasPrefix($0) }) else { continue }
+            // Only keep encoder.* keys
+            guard key.hasPrefix("encoder.") else { continue }
 
-            // DO NOT drop the prefix. The ModuleParameters.unflattened requires the top-level 
-            // module namespaces (encoder, encoderTransformer, downsample, quantizer)
-            // to correctly map to the properties of Qwen3TTSAudioEncoder.
-            let workingKey = key
+            let workingKey = String(key.dropFirst("encoder.".count))
 
             // Handle codebook data (cluster_usage + embedding_sum -> embed.weight)
             if workingKey.contains("_codebook.cluster_usage") || workingKey.contains("_codebook.embedding_sum") {
